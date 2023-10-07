@@ -153,10 +153,13 @@ int Sync(const std::string& src, const std::string& dst)
     }
 
     pool.JoinAll();
+    return 0;
 }
 
 int main(int argc, char** argv)
 {
+    spdlog::set_level(spdlog::level::level_enum::warn);
+
     args::ArgumentParser p("file sync");
     args::Group commands(p, "commands");
     args::Command sync(commands, "sync", "synchronize folder content", [&](args::Subparser& parser)
@@ -180,8 +183,7 @@ int main(int argc, char** argv)
             auto code = Sync(srcDir.Get(), dstDir.Get());
             auto finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> elapsed = finish - start;
-            spdlog::debug("sync time: {0}ms", elapsed.count());
-            return code;
+            spdlog::debug("sync time: {0}ms, code:{1}", elapsed.count(), code);
         }
         else
         {
