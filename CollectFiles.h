@@ -15,7 +15,7 @@ struct IgnoreAttribute
     std::string base;
     std::string path;
     // ÊÇ·ñµÝ¹é
-    bool recursive;
+    bool isRecursive;
     PathType type;
 };
 
@@ -23,7 +23,7 @@ class CollectFiles
 {
 public:
 
-    CollectFiles(const std::string& path);
+    CollectFiles(const std::string& path, const std::vector<std::string>& ignoreLines = {});
 
     ~CollectFiles();
 
@@ -40,6 +40,8 @@ private:
     bool Ignore(const std::filesystem::path& path);
 
     void ParseGitIgnore(const std::filesystem::path& path);
+
+    void ParseIgnoreLine(const std::string& str, const std::string& parent_path);
 
     std::string FmtPath(const std::string& path);
 

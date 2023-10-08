@@ -8,6 +8,8 @@ set(_Sources
     ${CMAKE_CURRENT_LIST_DIR}/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CollectFiles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CollectFiles.h
+    ${CMAKE_CURRENT_LIST_DIR}/Config.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Config.h
     ${CMAKE_CURRENT_LIST_DIR}/ThreadPool.h
 )
 

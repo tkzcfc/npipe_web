@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 
-CollectFiles::CollectFiles(const std::string& path)
+CollectFiles::CollectFiles(const std::string& path, const std::vector<std::string>& ignoreLines)
 {
     m_preferredSeparator = std::filesystem::path::preferred_separator;
 
@@ -16,9 +16,14 @@ CollectFiles::CollectFiles(const std::string& path)
     IgnoreAttribute attri;
     attri.base = m_rootPath;
     attri.path = ".git";
-    attri.recursive = true;
+    attri.isRecursive = true;
     attri.type = PathType::Dir;
     m_ignores.push_back(attri);
+
+    for (auto& line : ignoreLines)
+    {
+        ParseIgnoreLine(line, m_rootPath);
+    }
 
     WalkFiles(m_rootPath);
 }
@@ -101,7 +106,7 @@ bool CollectFiles::Ignore(const std::filesystem::path& path)
         }
 
         // 不递归则判断是否在有效路径内 d:\new
-        if (!ignore.recursive && path.parent_path().string() != ignore.base) 
+        if (!ignore.isRecursive && path.parent_path().string() != ignore.base)
         {
             continue;
         }
@@ -169,68 +174,72 @@ void CollectFiles::ParseGitIgnore(const std::filesystem::path& path)
         return;
     }
 
+    std::string parent_path = path.parent_path().string();
     std::string line;
     while (std::getline(file, line)) 
     {
-        line = trim(line);
-        if (line.empty())
-            continue;
-        if (line[0] == '#')
-            continue;
-
-        for (size_t i = 0; i < line.size(); ++i)
-        {
-            if (line[i] == '\\')
-                line[i] = '/';
-        }
-
-        IgnoreAttribute attri;
-        attri.base = path.parent_path().string();
-        attri.recursive = line[0] != '/';
-
-        if (line[0] == '/')
-        {
-            line = line.substr(1);
-        }
-
-        line = trim(line);
-        if (line.empty())
-            continue;
-
-        if (line[line.size() - 1] == '/')
-        {
-            attri.type = PathType::Dir;
-            line = line.substr(0, line.find_last_of('/'));
-        }
-        else
-        {
-            if (line[0] == '*')
-            {
-                line = line.substr(1);
-                attri.type = PathType::MatchFile;
-            }
-            else
-            {
-                attri.type = PathType::Both;
-            }
-        }
-
-        if (line.empty())
-            continue;
-
-        auto separatorPos = line.find_last_of('/');
-        if (separatorPos != std::string::npos && separatorPos > 0)
-        {
-            attri.base = attri.base + m_preferredSeparator + line.substr(0, separatorPos);
-            line = line.substr(separatorPos + 1);
-        }
-
-        attri.base = FmtPath(attri.base);
-        attri.path = line;
-        m_ignores.push_back(attri);
+        ParseIgnoreLine(line, parent_path);
     }
 
     file.close();
+}
+
+void CollectFiles::ParseIgnoreLine(const std::string& str, const std::string& parent_path)
+{
+    auto line = trim(str);
+    if (line.empty() || line[0] == '#')
+        return;
+
+    for (size_t i = 0; i < line.size(); ++i)
+    {
+        if (line[i] == '\\')
+            line[i] = '/';
+    }
+
+    IgnoreAttribute attri;
+    attri.base = parent_path;
+    attri.isRecursive = line[0] != '/';
+
+    if (line[0] == '/')
+    {
+        line = line.substr(1);
+    }
+
+    line = trim(line);
+    if (line.empty())
+        return;
+
+    if (line[line.size() - 1] == '/')
+    {
+        attri.type = PathType::Dir;
+        line = line.substr(0, line.find_last_of('/'));
+    }
+    else
+    {
+        if (line[0] == '*')
+        {
+            line = line.substr(1);
+            attri.type = PathType::MatchFile;
+        }
+        else
+        {
+            attri.type = PathType::Both;
+        }
+    }
+
+    if (line.empty())
+        return;
+
+    auto separatorPos = line.find_last_of('/');
+    if (separatorPos != std::string::npos && separatorPos > 0)
+    {
+        attri.base = attri.base + m_preferredSeparator + line.substr(0, separatorPos);
+        line = line.substr(separatorPos + 1);
+    }
+
+    attri.base = FmtPath(attri.base);
+    attri.path = line;
+    m_ignores.push_back(attri);
 }
 
 std::string CollectFiles::FmtPath(const std::string& path)

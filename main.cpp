@@ -10,6 +10,7 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/fmt.h"
 #include "spdlog/fmt/ostr.h"
+#include "Config.h"
 
 using nbsdx::concurrent::ThreadPool;
 
@@ -90,12 +91,10 @@ int Sync(const std::string& src, const std::string& dst)
         }
     }
 
-    CollectFiles srcFiles(src);
-    CollectFiles dstFiles(dst);
+    CollectFiles srcFiles(src, Config::instance().srcIgnores);
+    CollectFiles dstFiles(dst, Config::instance().dstIgnores);
 
-    const unsigned int n = std::thread::hardware_concurrency();
-    //std::cout << "Number of CPU cores: " << n << std::endl;
-    ThreadPool pool(n);
+    ThreadPool pool(Config::instance().threadNum);
 
     std::set<std::filesystem::path> srcRelativeFileSet;
     for (auto& file : srcFiles.Files())
@@ -103,13 +102,15 @@ int Sync(const std::string& src, const std::string& dst)
         srcRelativeFileSet.insert(srcFiles.GetRelativePath(file));
     }
 
-    // 删除多余的文件
-    for (auto& file : dstFiles.Files())
+    if (!Config::instance().disableFileDeletion)
     {
-        if (!srcRelativeFileSet.contains(dstFiles.GetRelativePath(file)))
+        // 删除多余的文件
+        for (auto& file : dstFiles.Files())
         {
-            pool.AddJob([file, &dstFiles]() {
-                try
+            if (!srcRelativeFileSet.contains(dstFiles.GetRelativePath(file)))
+            {
+                pool.AddJob([file, &dstFiles]() {
+                    try
                 {
                     if (!std::filesystem::remove(file))
                         spdlog::error("remove failed: {0}", file);
@@ -124,7 +125,8 @@ int Sync(const std::string& src, const std::string& dst)
                 {
                     spdlog::error(e.what());
                 }
-            });
+                    });
+            }
         }
     }
 
@@ -132,13 +134,125 @@ int Sync(const std::string& src, const std::string& dst)
     {
         auto dstFile = dstFiles.GetRootPath() / srcFiles.GetRelativePath(file);
         pool.AddJob([file, dstFile, &srcFiles]() {
+        try
+        {
+            if (!CompareFile(file, dstFile))
+            {
+                std::filesystem::create_directories(dstFile.parent_path());
+                std::filesystem::copy_file(file, dstFile, std::filesystem::copy_options::overwrite_existing);
+                spdlog::info("copy file: {0}", srcFiles.GetRelativePath(file));
+            }
+        }
+        catch (const std::filesystem::filesystem_error& e)
+        {
+            spdlog::error(e.what());
+        }
+        catch (const std::exception& e)
+        {
+            spdlog::error(e.what());
+        }
+            });
+    }
+
+    pool.JoinAll();
+    return 0;
+}
+
+
+
+
+
+args::ArgumentParser globalParser("file sync");
+
+args::Group arguments("arguments");
+args::HelpFlag h(arguments, "help", "help", { 'h', "help" });
+args::ValueFlag<int> logLevel(arguments, "level", "The log level", { "log_level" });
+
+void ReadGlobalArguments()
+{
+    if (logLevel && logLevel.Get() >= 0 && logLevel.Get() < spdlog::level::level_enum::n_levels)
+    {
+        spdlog::set_level((spdlog::level::level_enum)logLevel.Get());
+    }
+}
+
+void SyncCommand(args::Subparser& parser)
+{
+    args::ValueFlag<std::string> srcDir(parser, "path", "The source directory", { 's', "src" });
+    args::ValueFlag<std::string> dstDir(parser, "path", "The destination directory", { 'd', "dst" });
+    args::ValueFlag<bool> disableFileDeletion(parser, "0/1", "Disable file deletion", { "disable_file_deletion" });
+    args::NargsValueFlag<std::string> srcIgnoreList(parser, "path...", "The src ignores", { "src_ignore" }, args::Nargs(1, INT_MAX));
+    args::NargsValueFlag<std::string> dstIgnoreList(parser, "path...", "The dst ignores", { "dst_ignore" }, args::Nargs(1, INT_MAX));
+
+    parser.Parse();
+
+    ReadGlobalArguments();
+
+
+    for (auto&& path : srcIgnoreList.Get())
+    {
+        Config::instance().srcIgnores.push_back(path);
+    }
+    for (auto&& path : dstIgnoreList.Get())
+    {
+        Config::instance().dstIgnores.push_back(path);
+    }
+
+    if (disableFileDeletion)
+    {
+        Config::instance().disableFileDeletion = disableFileDeletion.Get();
+    }
+
+    if (srcDir && dstDir)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        auto code = Sync(srcDir.Get(), dstDir.Get());
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = finish - start;
+        spdlog::debug("sync time: {0}ms, code:{1}", elapsed.count(), code);
+    }
+    else
+    {
+        std::cout << globalParser << std::endl;
+    }
+}
+
+void CopyCommand(args::Subparser& parser)
+{
+    args::ValueFlag<std::string> srcDir(parser, "path", "The source directory", { 's', "src" });
+    args::ValueFlag<std::string> dstDir(parser, "path", "The destination directory", { 'd', "dst" });
+    args::NargsValueFlag<std::string> srcIgnoreList(parser, "path...", "The src ignores", { "src_ignore" }, args::Nargs(1, INT_MAX));
+    
+    parser.Parse();
+
+    ReadGlobalArguments();
+
+
+    for (auto&& path : srcIgnoreList.Get())
+    {
+        Config::instance().srcIgnores.push_back(path);
+    }
+    Config::instance().disableFileDeletion = true;
+
+    if (srcDir && dstDir)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        if (std::filesystem::is_directory(srcDir.Get()))
+        {
+            Sync(srcDir.Get(), dstDir.Get());
+        }
+        else
+        {
+            std::filesystem::path srcFile = srcDir.Get();
+            std::filesystem::path dstFile = dstDir.Get();
             try
             {
-                if (!CompareFile(file, dstFile))
+                if (!CompareFile(srcFile, dstFile))
                 {
                     std::filesystem::create_directories(dstFile.parent_path());
-                    std::filesystem::copy_file(file, dstFile, std::filesystem::copy_options::overwrite_existing);
-                    spdlog::info("copy file: {0}", srcFiles.GetRelativePath(file));
+                    std::filesystem::copy_file(srcFile, dstFile, std::filesystem::copy_options::overwrite_existing);
+                    spdlog::info("copy file: {0}", srcFile.string());
                 }
             }
             catch (const std::filesystem::filesystem_error& e)
@@ -149,66 +263,39 @@ int Sync(const std::string& src, const std::string& dst)
             {
                 spdlog::error(e.what());
             }
-        });
-    }
+        }
 
-    pool.JoinAll();
-    return 0;
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = finish - start;
+        spdlog::debug("copy time: {0}ms", elapsed.count());
+    }
+    else
+    {
+        std::cout << globalParser << std::endl;
+    }
 }
 
 int main(int argc, char** argv)
 {
-    spdlog::set_level(spdlog::level::level_enum::warn);
-
-    args::ArgumentParser p("file sync");
-    args::Group commands(p, "commands");
-    args::Command sync(commands, "sync", "synchronize folder content", [&](args::Subparser& parser)
-    {
-        args::ValueFlag<std::string> srcDir(parser, "ptah", "The source directory", { 's', "src" });
-        args::ValueFlag<std::string> dstDir(parser, "ptah", "The destination directory", { 'd', "dst" });
-        args::ValueFlag<int> logLevel(parser, "level", "The log level", { "log_level" });
-        parser.Parse();
-
-        if (logLevel)
-        {
-            if(logLevel.Get() >= 0 || logLevel.Get() <= spdlog::level::level_enum::n_levels)
-            {
-                spdlog::set_level((spdlog::level::level_enum)logLevel.Get());
-            }
-        }
-
-        if (srcDir && dstDir)
-        {
-            auto start = std::chrono::high_resolution_clock::now();
-            auto code = Sync(srcDir.Get(), dstDir.Get());
-            auto finish = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> elapsed = finish - start;
-            spdlog::debug("sync time: {0}ms, code:{1}", elapsed.count(), code);
-        }
-        else
-        {
-            std::cout << p << std::endl;
-        }
-    });
-
-    args::Group arguments("arguments");
-    args::HelpFlag h(arguments, "help", "help", { 'h', "help" });
-    args::GlobalOptions globals(p, arguments);
-
+    args::Group commands(globalParser, "commands");
+    args::Command sync(commands, "sync", "synchronize folder content", &SyncCommand);
+    args::Command copy(commands, "copy", "copying files or folders", &CopyCommand);
+    
+    args::GlobalOptions globals(globalParser, arguments);
 
     try
     {
-        p.ParseCLI(argc, argv);
+        globalParser.ParseCLI(argc, argv);
     }
     catch (args::Help)
     {
-        std::cout << p << std::endl;
+        std::cout << globalParser << std::endl;
     }
     catch (args::Error& e)
     {
         spdlog::error("{0}", e.what());
         //spdlog::error("{0}\n{1}", e.what(), fmt::streamed(p));
-        std::cout << p << std::endl;
+        std::cout << globalParser << std::endl;
         return 1;
     }
     return 0;
