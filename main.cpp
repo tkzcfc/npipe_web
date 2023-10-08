@@ -183,6 +183,7 @@ void SyncCommand(args::Subparser& parser)
     args::ValueFlag<bool> disableFileDeletion(parser, "0/1", "Disable file deletion", { "disable_file_deletion" });
     args::NargsValueFlag<std::string> srcIgnoreList(parser, "path...", "The src ignores", { "src_ignore" }, args::Nargs(1, INT_MAX));
     args::NargsValueFlag<std::string> dstIgnoreList(parser, "path...", "The dst ignores", { "dst_ignore" }, args::Nargs(1, INT_MAX));
+    args::NargsValueFlag<std::string> ignoreList(parser, "path...", "The dst&src ignores", { "ignore" }, args::Nargs(1, INT_MAX));
 
     parser.Parse();
 
@@ -197,6 +198,12 @@ void SyncCommand(args::Subparser& parser)
     {
         Config::instance().dstIgnores.push_back(path);
     }
+    for (auto&& path : ignoreList.Get())
+    {
+        Config::instance().srcIgnores.push_back(path);
+        Config::instance().dstIgnores.push_back(path);
+    }
+
 
     if (disableFileDeletion)
     {
@@ -221,7 +228,7 @@ void CopyCommand(args::Subparser& parser)
 {
     args::ValueFlag<std::string> srcDir(parser, "path", "The source directory", { 's', "src" });
     args::ValueFlag<std::string> dstDir(parser, "path", "The destination directory", { 'd', "dst" });
-    args::NargsValueFlag<std::string> srcIgnoreList(parser, "path...", "The src ignores", { "src_ignore" }, args::Nargs(1, INT_MAX));
+    args::NargsValueFlag<std::string> srcIgnoreList(parser, "path...", "The ignores", { "src_ignore", "ignore"}, args::Nargs(1, INT_MAX));
     
     parser.Parse();
 
