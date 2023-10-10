@@ -68,7 +68,7 @@ void CollectFiles::WalkFiles(const std::filesystem::path& path)
 
     for (auto& file : files)
     {
-        if (file.filename().string() == ".gitignore")
+        if (file.filename().string() == ".gitignore" || file.extension().string() == ".gitignore")
         {
             ParseGitIgnore(file);
         }
