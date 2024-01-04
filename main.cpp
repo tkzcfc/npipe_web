@@ -1,6 +1,6 @@
 
 #include <iostream>
-#include "ThreadPool.h"
+#include "hthreadpool.h"
 #include "CollectFiles.h"
 #include <thread>
 #include "args.hxx"
@@ -12,7 +12,6 @@
 #include "spdlog/fmt/ostr.h"
 #include "Config.h"
 
-using nbsdx::concurrent::ThreadPool;
 
 bool CompareFile(const std::filesystem::path& srcFile, const std::filesystem::path& dstFile)
 {
@@ -94,7 +93,7 @@ int Sync(const std::string& src, const std::string& dst)
     CollectFiles srcFiles(src, Config::instance().srcIgnores);
     CollectFiles dstFiles(dst, Config::instance().dstIgnores);
 
-    ThreadPool pool(Config::instance().threadNum);
+    HThreadPool pool(Config::instance().threadNum);
 
     std::set<std::filesystem::path> srcRelativeFileSet;
     for (auto& file : srcFiles.Files())
@@ -109,7 +108,7 @@ int Sync(const std::string& src, const std::string& dst)
         {
             if (!srcRelativeFileSet.contains(dstFiles.GetRelativePath(file)))
             {
-                pool.AddJob([file, &dstFiles]() {
+                pool.commit([file, &dstFiles]() {
                     try
                 {
                     if (!std::filesystem::remove(file))
@@ -133,7 +132,7 @@ int Sync(const std::string& src, const std::string& dst)
     for (auto& file : srcFiles.Files())
     {
         auto dstFile = dstFiles.GetRootPath() / srcFiles.GetRelativePath(file);
-        pool.AddJob([file, dstFile, &srcFiles]() {
+        pool.commit([file, dstFile, &srcFiles]() {
         try
         {
             if (!CompareFile(file, dstFile))
@@ -154,7 +153,7 @@ int Sync(const std::string& src, const std::string& dst)
             });
     }
 
-    pool.JoinAll();
+    pool.wait();
     return 0;
 }
 
