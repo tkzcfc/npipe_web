@@ -1,20 +1,50 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
+use crate::login;
+use poll_promise::Promise;
+use serde_urlencoded;
+use std::collections::HashMap;
 
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
+pub struct Resource {
+    /// HTTP response
+    pub(crate) response: ehttp::Response,
+}
+
+impl Resource {
+    fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
+        Self { response }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum RequestType {
+    Login,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct TemplateApp {
+    pub(crate) addr: String,
+
+    pub(crate) username: String,
+    pub(crate) password: String,
+
+    pub(crate) is_dark_them: bool,
+
+    #[serde(skip)]
+    pub(crate) token: String,
+
+    #[serde(skip)]
+    pub(crate) promise_map: HashMap<RequestType, Promise<ehttp::Result<Resource>>>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            addr: "http://127.0.0.1:8118/api".to_owned(),
+            username: "admin".into(),
+            password: "".into(),
+            token: "".into(),
+            is_dark_them: true,
+            promise_map: HashMap::new(),
         }
     }
 }
@@ -22,25 +52,70 @@ impl Default for TemplateApp {
 impl TemplateApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
+        let mut app: Self = Default::default();
 
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            app = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
 
-        Default::default()
+        if app.is_dark_them {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            cc.egui_ctx.set_visuals(egui::Visuals::light());
+        }
+
+        app
+    }
+
+    pub fn can_request(&mut self, request_type: &RequestType) -> bool {
+        if let Some(promise) = self.promise_map.get(request_type) {
+            if let Some(result) = promise.ready() {
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    pub fn http_request(
+        &mut self,
+        ctx: &egui::Context,
+        request_type: RequestType,
+        path: &str,
+        params: HashMap<String, String>,
+    ) {
+        let mut url = if let Some('/') = self.addr.chars().last() {
+            self.addr.clone()
+        } else {
+            format!("{}/", self.addr)
+        };
+
+        if path.len() > 0 {
+            url.push_str(path);
+        }
+
+        let encoded: String = serde_urlencoded::to_string(params).unwrap();
+        if encoded.len() > 0 {
+            url.push_str("?");
+            url.push_str(&encoded);
+        }
+
+        let ctx = ctx.clone();
+        let (sender, promise) = Promise::new();
+        let request = ehttp::Request::get(url);
+        ehttp::fetch(request, move |response| {
+            ctx.request_repaint(); // wake up UI thread
+            let resource = response.map(|response| Resource::from_response(&ctx, response));
+            sender.send(resource);
+        });
+
+        self.promise_map.insert(request_type, promise);
     }
 }
 
 impl eframe::App for TemplateApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
@@ -62,35 +137,65 @@ impl eframe::App for TemplateApp {
                 }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
+                self.is_dark_them = ctx.style().visuals.dark_mode;
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("eframe template");
+        if self.token.is_empty() {
+            login::ui(ctx, self);
+        }
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.label);
-            });
+        // egui::CentralPanel::default().show(ctx, |ui| {
+        //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        //         // The central panel the region left after adding TopPanel's and SidePanel's
+        //         ui.heading("npipe-web");
+        //
+        //         ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        //             // ui.horizontal(|ui| {
+        //             //     ui.label("Write something: ");
+        //             //     ui.text_edit_singleline(&mut self.addr);
+        //             // });
+        //             // let mut dummy = false;
+        //             // ui.checkbox(&mut dummy, "checkbox");
+        //             //     ui.label("Write something  : ");
+        //             //     ui.text_edit_singleline(&mut self.addr);
+        //
+        //             ui.horizontal(|ui| {
+        //                 ui.label("server:");
+        //                 ui.text_edit_singleline(&mut self.addr);
+        //             });
+        //         });
+        //
+        //         ui.horizontal(|ui| {
+        //             ui.label("password:");
+        //             ui.add(password(&mut self.password));
+        //         });
+        //
+        //         // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
+        //         if ui.button("Login").clicked() {}
+        //
+        //         ui.separator();
+        //
+        //         ui.add(egui::github_link_file!(
+        //             "https://github.com/emilk/eframe_template/blob/master/",
+        //             "Source code."
+        //         ));
+        //     });
+        // });
 
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
-            }
-
-            ui.separator();
-
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
-            });
+        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
+            powered_by_egui_and_eframe(ui);
+            egui::warn_if_debug_build(ui);
         });
+    }
+
+    /// Called by the frame work to save state before shutdown.
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+
+    fn auto_save_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(1)
     }
 }
 

@@ -16,6 +16,9 @@ eframe = { version = "0.25.0", default-features = false, features = [
 ] }
 log = "0.4"
 ehttp = "0.4"
+poll-promise = "0.3"
+serde_urlencoded = "0.7"
+
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
@@ -23,6 +26,7 @@ serde = { version = "1", features = ["derive"] }
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.10"
+
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
