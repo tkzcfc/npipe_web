@@ -1,5 +1,5 @@
 [package]
-name = "eframe_template"
+name = "npipe_web"
 version = "0.1.0"
 authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2021"
@@ -15,6 +15,7 @@ eframe = { version = "0.25.0", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
+ehttp = "0.4"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
