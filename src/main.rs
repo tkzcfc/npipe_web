@@ -26,6 +26,7 @@ fn main() -> eframe::Result<()> {
 
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
+
 fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();

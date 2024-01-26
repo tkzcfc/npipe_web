@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
     egui::Window::new("Login")
-        .vscroll(true)
-        .hscroll(true)
+        .vscroll(false)
+        .hscroll(false)
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
@@ -31,14 +31,30 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
                     let mut params: HashMap<String, String> = HashMap::new();
                     params.insert("username".into(), app.username.clone());
                     params.insert("password".into(), app.password.clone());
-                    app.http_request(ctx, RequestType::Login, "login", params);
+                    app.http_request(ctx, RequestType::Login, "login", params, true);
                 }
 
                 if let Some(promise) = app.promise_map.get(&RequestType::Login) {
                     if let Some(result) = promise.ready() {
                         match result {
                             Ok(resource) => {
-                                app.token = resource.response.status_text.clone();
+                                // app.token = resource.response.status_text.clone();
+
+                                let ref response = resource.response;
+
+                                ui.monospace(format!("url:          {}", response.url));
+                                ui.monospace(format!(
+                                    "status:       {} ({})",
+                                    response.status, response.status_text
+                                ));
+                                ui.monospace(format!(
+                                    "content-type: {}",
+                                    response.content_type().unwrap_or_default()
+                                ));
+                                ui.monospace(format!(
+                                    "size:         {:.1} kB",
+                                    response.bytes.len() as f32 / 1000.0
+                                ));
                             }
                             Err(error) => {
                                 // This should only happen if the fetch API isn't available or something similar.

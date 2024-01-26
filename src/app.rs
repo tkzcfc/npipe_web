@@ -1,5 +1,6 @@
 use crate::login;
 use poll_promise::Promise;
+use serde::{Deserialize, Serialize};
 use serde_urlencoded;
 use std::collections::HashMap;
 
@@ -24,12 +25,13 @@ pub enum RequestType {
 pub struct TemplateApp {
     pub(crate) addr: String,
 
+    /// 用户名
     pub(crate) username: String,
+    /// 密码
     pub(crate) password: String,
-
+    /// 是否是暗黑主题
     pub(crate) is_dark_them: bool,
-
-    #[serde(skip)]
+    /// token
     pub(crate) token: String,
 
     #[serde(skip)]
@@ -85,6 +87,7 @@ impl TemplateApp {
         request_type: RequestType,
         path: &str,
         params: HashMap<String, String>,
+        is_post: bool,
     ) {
         let mut url = if let Some('/') = self.addr.chars().last() {
             self.addr.clone()
@@ -92,19 +95,22 @@ impl TemplateApp {
             format!("{}/", self.addr)
         };
 
-        if path.len() > 0 {
-            url.push_str(path);
-        }
+        url.push_str(path);
 
-        let encoded: String = serde_urlencoded::to_string(params).unwrap();
-        if encoded.len() > 0 {
-            url.push_str("?");
-            url.push_str(&encoded);
-        }
+        let request = if is_post {
+            let json_string = serde_json::to_string(&params).unwrap();
+            ehttp::Request::post(url, json_string.into())
+        } else {
+            let encoded: String = serde_urlencoded::to_string(params).unwrap();
+            if encoded.len() > 0 {
+                url.push_str("?");
+                url.push_str(&encoded);
+            }
+            ehttp::Request::get(url)
+        };
 
         let ctx = ctx.clone();
         let (sender, promise) = Promise::new();
-        let request = ehttp::Request::get(url);
         ehttp::fetch(request, move |response| {
             ctx.request_repaint(); // wake up UI thread
             let resource = response.map(|response| Resource::from_response(&ctx, response));
@@ -112,6 +118,11 @@ impl TemplateApp {
         });
 
         self.promise_map.insert(request_type, promise);
+    }
+
+    pub fn login_success(&mut self, token: String) {
+        self.promise_map.clear();
+        self.token = token;
     }
 }
 
