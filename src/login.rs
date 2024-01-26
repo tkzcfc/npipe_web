@@ -49,7 +49,15 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
                                 if response.ok {
                                     match serde_json::from_slice::<LoginAck>(&response.bytes) {
                                         Ok(ack) => {
-                                            app.login_success(ack.token);
+                                            if ack.msg.is_empty() {
+                                                app.login_success(ack.token);
+                                            }
+                                            else {
+                                                ui.colored_label(
+                                                    ui.visuals().error_fg_color,
+                                                    ack.msg,
+                                                );
+                                            }
                                         }
                                         Err(err) => {
                                             ui.colored_label(

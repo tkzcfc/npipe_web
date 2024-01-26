@@ -8,5 +8,6 @@ pub struct LoginReq {
 
 #[derive(Serialize, Deserialize)]
 pub struct LoginAck {
+    pub msg: String,
     pub token: String,
 }
