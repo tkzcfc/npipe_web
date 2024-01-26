@@ -1,6 +1,5 @@
 use crate::login;
 use poll_promise::Promise;
-use serde::{Deserialize, Serialize};
 use serde_urlencoded;
 use std::collections::HashMap;
 
@@ -71,11 +70,7 @@ impl TemplateApp {
 
     pub fn can_request(&mut self, request_type: &RequestType) -> bool {
         if let Some(promise) = self.promise_map.get(request_type) {
-            if let Some(result) = promise.ready() {
-                true
-            } else {
-                false
-            }
+            promise.ready().is_some()
         } else {
             true
         }
@@ -86,8 +81,8 @@ impl TemplateApp {
         ctx: &egui::Context,
         request_type: RequestType,
         path: &str,
-        params: HashMap<String, String>,
-        is_post: bool,
+        params: Option<HashMap<String, String>>,
+        body: Vec<u8>,
     ) {
         let mut url = if let Some('/') = self.addr.chars().last() {
             self.addr.clone()
@@ -97,18 +92,15 @@ impl TemplateApp {
 
         url.push_str(path);
 
-        let request = if is_post {
-            let json_string = serde_json::to_string(&params).unwrap();
-            ehttp::Request::post(url, json_string.into())
-        } else {
+        if let Some(params) = params {
             let encoded: String = serde_urlencoded::to_string(params).unwrap();
             if encoded.len() > 0 {
                 url.push_str("?");
                 url.push_str(&encoded);
             }
-            ehttp::Request::get(url)
-        };
+        }
 
+        let request = ehttp::Request::post(url, body);
         let ctx = ctx.clone();
         let (sender, promise) = Promise::new();
         ehttp::fetch(request, move |response| {
@@ -152,9 +144,9 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        if self.token.is_empty() {
-            login::ui(ctx, self);
-        }
+        // if self.token.is_empty() {
+        login::ui(ctx, self);
+        // }
 
         // egui::CentralPanel::default().show(ctx, |ui| {
         //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {

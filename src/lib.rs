@@ -3,5 +3,6 @@
 mod app;
 mod login;
 mod password;
+mod proto;
 
 pub use app::TemplateApp;

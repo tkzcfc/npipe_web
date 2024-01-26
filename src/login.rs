@@ -1,7 +1,7 @@
 use crate::app::RequestType;
 use crate::password::password;
+use crate::proto::{LoginAck, LoginReq};
 use crate::TemplateApp;
-use std::collections::HashMap;
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
     egui::Window::new("Login")
@@ -28,33 +28,45 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
 
                 ui.separator();
                 if ui.button("Login").clicked() && app.can_request(&RequestType::Login) {
-                    let mut params: HashMap<String, String> = HashMap::new();
-                    params.insert("username".into(), app.username.clone());
-                    params.insert("password".into(), app.password.clone());
-                    app.http_request(ctx, RequestType::Login, "login", params, true);
+                    let req = LoginReq {
+                        username: app.username.clone(),
+                        password: app.password.clone(),
+                    };
+                    app.http_request(
+                        ctx,
+                        RequestType::Login,
+                        "login",
+                        None,
+                        serde_json::to_string(&req).unwrap().into(),
+                    );
                 }
 
                 if let Some(promise) = app.promise_map.get(&RequestType::Login) {
                     if let Some(result) = promise.ready() {
                         match result {
                             Ok(resource) => {
-                                // app.token = resource.response.status_text.clone();
-
                                 let ref response = resource.response;
-
-                                ui.monospace(format!("url:          {}", response.url));
-                                ui.monospace(format!(
-                                    "status:       {} ({})",
-                                    response.status, response.status_text
-                                ));
-                                ui.monospace(format!(
-                                    "content-type: {}",
-                                    response.content_type().unwrap_or_default()
-                                ));
-                                ui.monospace(format!(
-                                    "size:         {:.1} kB",
-                                    response.bytes.len() as f32 / 1000.0
-                                ));
+                                if response.ok {
+                                    match serde_json::from_slice::<LoginAck>(&response.bytes) {
+                                        Ok(ack) => {
+                                            app.login_success(ack.token);
+                                        }
+                                        Err(err) => {
+                                            ui.colored_label(
+                                                ui.visuals().error_fg_color,
+                                                err.to_string(),
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    ui.colored_label(
+                                        ui.visuals().error_fg_color,
+                                        format!(
+                                            "status:       {} ({})",
+                                            response.status, response.status_text
+                                        ),
+                                    );
+                                }
                             }
                             Err(error) => {
                                 // This should only happen if the fetch API isn't available or something similar.
