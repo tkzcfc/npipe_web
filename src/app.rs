@@ -2,7 +2,6 @@ use crate::login;
 use crate::proto::GeneralResponse;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
-use log::error;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
@@ -16,7 +15,6 @@ pub struct Resource {
 
 impl Resource {
     fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
-        error!("text: {}", response.text().unwrap());
         Self {
             response,
             checked: false,
@@ -174,6 +172,9 @@ impl TemplateApp {
                                     break;
                                 }
                             }
+                        } else if response.status == 401 {
+                            self.logout();
+                            break;
                         }
                     }
                 }
