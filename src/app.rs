@@ -2,21 +2,33 @@ use crate::login;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use eframe::epaint::FontFamily;
+use eframe::epaint::text::{FontData, FontDefinitions};
+use crate::proto::GeneralResponse;
 
 pub struct Resource {
     /// HTTP response
     pub(crate) response: ehttp::Response,
+    checked: bool
 }
+
+
 
 impl Resource {
     fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
-        Self { response }
+        Self {
+            response,
+            checked: false
+        }
     }
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum RequestType {
     Login,
+    Test
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -30,11 +42,16 @@ pub struct TemplateApp {
     pub(crate) password: String,
     /// 是否是暗黑主题
     pub(crate) is_dark_them: bool,
-    /// token
-    pub(crate) token: String,
+    /// 是否已登录
+    pub(crate) logged_in: bool,
+    /// cookies缓存
+    pub(crate) cookies: Vec<String>,
 
     #[serde(skip)]
     pub(crate) promise_map: HashMap<RequestType, Promise<ehttp::Result<Resource>>>,
+
+    #[serde(skip)]
+    need_check: Arc<Mutex<bool>>,
 }
 
 impl Default for TemplateApp {
@@ -43,9 +60,11 @@ impl Default for TemplateApp {
             addr: "http://127.0.0.1:8118/api".to_owned(),
             username: "admin".into(),
             password: "".into(),
-            token: "".into(),
+            logged_in: false,
             is_dark_them: true,
             promise_map: HashMap::new(),
+            cookies: Vec::new(),
+            need_check: Arc::new(Mutex::new(false))
         }
     }
 }
@@ -64,6 +83,8 @@ impl TemplateApp {
         } else {
             cc.egui_ctx.set_visuals(egui::Visuals::light());
         }
+
+        load_fonts(&cc.egui_ctx);
 
         app
     }
@@ -100,11 +121,20 @@ impl TemplateApp {
             }
         }
 
-        let request = ehttp::Request::post(url, body);
+        let mut request = ehttp::Request::post(url, body);
+
+        // 使用保存的 cookies
+        let is_web = cfg!(target_arch = "wasm32");
+        if !is_web {
+            request.headers.headers.push(("Cookie".into(), self.cookies.join(";")));
+        }
+
+        let need_check = self.need_check.clone();
         let ctx = ctx.clone();
         let (sender, promise) = Promise::new();
         ehttp::fetch(request, move |response| {
             ctx.request_repaint(); // wake up UI thread
+            *need_check.lock().unwrap() = true;
             let resource = response.map(|response| Resource::from_response(&ctx, response));
             sender.send(resource);
         });
@@ -112,15 +142,52 @@ impl TemplateApp {
         self.promise_map.insert(request_type, promise);
     }
 
-    pub fn login_success(&mut self, token: String) {
+    fn http_response_check(&mut self) {
+        if *self.need_check.lock().unwrap() == false {
+            return;
+        }
+        for value in self.promise_map.values_mut() {
+            if let Some(result) = value.ready_mut() {
+                if let Ok(resource) = result {
+                    if !resource.checked {
+                        resource.checked = false;
+                        let ref response = resource.response;
+                        if response.ok {
+                            if let Ok(response) = serde_json::from_slice::<GeneralResponse>(&response.bytes) {
+                                if response.code == 10086 {
+                                    self.logout();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        *self.need_check.lock().unwrap() = false;
+    }
+
+    /// 登录成功
+    pub fn login_success(&mut self, cookies: Vec<String>) {
         self.promise_map.clear();
-        self.token = token;
+        self.logged_in = true;
+        self.cookies = cookies;
+    }
+
+    /// 登出，清理数据
+    pub fn logout(&mut self) {
+        self.promise_map.clear();
+        self.logged_in = false;
+        self.cookies.clear();
     }
 }
 
 impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.http_response_check();
+
         // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
@@ -129,24 +196,28 @@ impl eframe::App for TemplateApp {
 
             egui::menu::bar(ui, |ui| {
                 // NOTE: no File->Quit on web pages!
-                let is_web = cfg!(target_arch = "wasm32");
-                if !is_web {
+                // let is_web = cfg!(target_arch = "wasm32");
+                // if !is_web {
                     ui.menu_button("File", |ui| {
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
+                        if ui.button("Test").clicked() {
+                            self.http_request(ctx, RequestType::Test, "test_auth", None, Vec::new());
+                        }
                     });
                     ui.add_space(16.0);
-                }
+                // }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
                 self.is_dark_them = ctx.style().visuals.dark_mode;
             });
         });
 
-        // if self.token.is_empty() {
+        // if !self.logged_in {
         login::ui(ctx, self);
         // }
+
 
         // egui::CentralPanel::default().show(ctx, |ui| {
         //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
@@ -214,4 +285,21 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         );
         ui.label(".");
     });
+}
+
+fn load_fonts(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::default();
+
+    fonts.font_data.insert(
+        String::from("s_chinese_fallback"),
+        FontData::from_static(include_bytes!("../assets/kuaile.ttf")),
+    );
+
+    fonts
+        .families
+        .get_mut(&FontFamily::Proportional)
+        .unwrap()
+        .push("s_chinese_fallback".to_owned());
+
+    ctx.set_fonts(fonts);
 }

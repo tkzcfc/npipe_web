@@ -1,7 +1,10 @@
+use log::{error, info};
 use crate::app::RequestType;
 use crate::password::password;
-use crate::proto::{LoginAck, LoginReq};
+use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
+use regex::Regex;
+
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
     egui::Window::new("Login")
@@ -47,10 +50,11 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
                             Ok(resource) => {
                                 let ref response = resource.response;
                                 if response.ok {
-                                    match serde_json::from_slice::<LoginAck>(&response.bytes) {
+                                    match serde_json::from_slice::<GeneralResponse>(&response.bytes) {
                                         Ok(ack) => {
-                                            if ack.msg.is_empty() {
-                                                app.login_success(ack.token);
+                                            if ack.code == 0 {
+                                                info!("login success");
+                                                app.login_success(extract_cookies(response));
                                             }
                                             else {
                                                 ui.colored_label(
@@ -94,4 +98,28 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
                 }
             });
         });
+}
+
+
+// 提取响应中的 Set-Cookie 头部
+fn extract_cookies(response: &ehttp::Response) -> Vec<String> {
+    response.headers.headers.iter()
+        .filter_map(|(name, value)| {
+            if name.eq_ignore_ascii_case("Set-Cookie") {
+                // 使用正则表达式查找cookie名称和值
+                // auth-id=mYiQZEtaR9EFh0KUXThIPfpu%2FyWu91D8IxUq2SRX6660xi57K84uv40gVA8YVYImklEngoO4njikpDr5Q6o%3D; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600
+                // 只捕获 auth-id=mYiQZEtaR9EFh0KUXThIPfpu%2FyWu91D8IxUq2SRX6660xi57K84uv40gVA8YVYImklEngoO4njikpDr5Q6o%3D
+                let cookie_re = Regex::new(r"[^;=\s]+=[^;]*").unwrap();
+                for cap in cookie_re.captures_iter(value) {
+                    if cap.len() > 0 {
+                        return Some(cap[0].to_owned());
+                    }
+                    break;
+                }
+                None
+            } else {
+                None
+            }
+        })
+        .collect()
 }
