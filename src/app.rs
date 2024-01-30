@@ -59,7 +59,7 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            api_url: "http://127.0.0.1:8118/api/".to_owned(),
+            api_url: "http://127.0.0.1:8120/api/".to_owned(),
             username: "admin".into(),
             password: "".into(),
             logged_in: false,
@@ -210,18 +210,24 @@ impl eframe::App for TemplateApp {
 
             egui::menu::bar(ui, |ui| {
                 // NOTE: no File->Quit on web pages!
-                // let is_web = cfg!(target_arch = "wasm32");
-                // if !is_web {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                    if ui.button("Test").clicked() {
-                        self.http_request(ctx, RequestType::Test, "test_auth", None, Vec::new());
-                    }
-                });
-                ui.add_space(16.0);
-                // }
+                let is_web = cfg!(target_arch = "wasm32");
+                if !is_web {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Quit").clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                        if ui.button("Test").clicked() {
+                            self.http_request(
+                                ctx,
+                                RequestType::Test,
+                                "test_auth",
+                                None,
+                                Vec::new(),
+                            );
+                        }
+                    });
+                    ui.add_space(16.0);
+                }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
                 self.is_dark_them = ctx.style().visuals.dark_mode;
