@@ -2,6 +2,7 @@ use crate::login;
 use crate::proto::GeneralResponse;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
+use log::error;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ pub struct Resource {
 
 impl Resource {
     fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
+        error!("text: {}", response.text().unwrap());
         Self {
             response,
             checked: false,
@@ -31,7 +33,7 @@ pub enum RequestType {
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct TemplateApp {
-    pub(crate) addr: String,
+    pub(crate) api_url: String,
 
     /// 用户名
     pub(crate) username: String,
@@ -49,12 +51,15 @@ pub struct TemplateApp {
 
     #[serde(skip)]
     need_check: Arc<Mutex<bool>>,
+
+    #[serde(skip)]
+    pub(crate) can_modify_api_url: bool,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            addr: "http://127.0.0.1:8118/api".to_owned(),
+            api_url: "http://127.0.0.1:8118/api/".to_owned(),
             username: "admin".into(),
             password: "".into(),
             logged_in: false,
@@ -62,6 +67,7 @@ impl Default for TemplateApp {
             promise_map: HashMap::new(),
             cookies: Vec::new(),
             need_check: Arc::new(Mutex::new(false)),
+            can_modify_api_url: true,
         }
     }
 }
@@ -83,6 +89,12 @@ impl TemplateApp {
 
         load_fonts(&cc.egui_ctx);
 
+        #[cfg(target_arch = "wasm32")]
+        if let Some(url) = get_current_url() {
+            app.api_url = url;
+            app.can_modify_api_url = false;
+        }
+
         app
     }
 
@@ -102,10 +114,10 @@ impl TemplateApp {
         params: Option<HashMap<String, String>>,
         body: Vec<u8>,
     ) {
-        let mut url = if let Some('/') = self.addr.chars().last() {
-            self.addr.clone()
+        let mut url = if let Some('/') = self.api_url.chars().last() {
+            self.api_url.clone()
         } else {
-            format!("{}/", self.addr)
+            format!("{}/", self.api_url)
         };
 
         url.push_str(path);
@@ -216,9 +228,9 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        // if !self.logged_in {
-        login::ui(ctx, self);
-        // }
+        if !self.logged_in {
+            login::ui(ctx, self);
+        }
 
         // egui::CentralPanel::default().show(ctx, |ui| {
         //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
@@ -303,4 +315,22 @@ fn load_fonts(ctx: &egui::Context) {
         .push("s_chinese_fallback".to_owned());
 
     ctx.set_fonts(fonts);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn get_current_url() -> Option<String> {
+    use url::{Position, Url};
+    use web_sys::window;
+
+    if let Some(window) = window() {
+        if let Some(location) = window.location().href().ok() {
+            if let Ok(mut url) = Url::parse(&location) {
+                url.set_path("/api/");
+                return Some(url.to_string());
+            } else {
+                return None;
+            }
+        }
+    }
+    None
 }

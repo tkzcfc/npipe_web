@@ -13,10 +13,12 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
         .collapsible(false)
         .show(ctx, |ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("server:");
-                    ui.text_edit_singleline(&mut app.addr);
-                });
+                if app.can_modify_api_url {
+                    ui.horizontal(|ui| {
+                        ui.label("api url:");
+                        ui.text_edit_singleline(&mut app.api_url);
+                    });
+                }
 
                 ui.horizontal(|ui| {
                     ui.label("username:");

@@ -1677,7 +1677,9 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "url",
  "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
