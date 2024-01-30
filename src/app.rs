@@ -28,6 +28,7 @@ impl Resource {
 pub enum RequestType {
     Login,
     Test,
+    Logout,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -234,47 +235,50 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        if !self.logged_in {
+        if self.logged_in {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.heading("Welcome");
+
+                if ui.button("logout").clicked() && self.can_request(&RequestType::Logout) {
+                    self.http_request(ctx, RequestType::Logout, "logout", None, Vec::new());
+                }
+
+
+                //ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    // The central panel the region left after adding TopPanel's and SidePanel's
+
+
+                    // ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    //     // ui.horizontal(|ui| {
+                    //     //     ui.label("Write something: ");
+                    //     //     ui.text_edit_singleline(&mut self.addr);
+                    //     // });
+                    //     // let mut dummy = false;
+                    //     // ui.checkbox(&mut dummy, "checkbox");
+                    //     //     ui.label("Write something  : ");
+                    //     //     ui.text_edit_singleline(&mut self.addr);
+                    //
+                    //     ui.horizontal(|ui| {
+                    //         ui.label("server:");
+                    //         ui.text_edit_singleline(&mut self.addr);
+                    //     });
+                    // });
+
+                    // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
+                    // if ui.button("Login").clicked() {}
+                    //
+                    // ui.separator();
+                    //
+                    // ui.add(egui::github_link_file!(
+                    //     "https://github.com/emilk/eframe_template/blob/master/",
+                    //     "Source code."
+                    // ));
+               // });
+            });
+        }
+        else {
             login::ui(ctx, self);
         }
-
-        // egui::CentralPanel::default().show(ctx, |ui| {
-        //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        //         // The central panel the region left after adding TopPanel's and SidePanel's
-        //         ui.heading("npipe-web");
-        //
-        //         ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        //             // ui.horizontal(|ui| {
-        //             //     ui.label("Write something: ");
-        //             //     ui.text_edit_singleline(&mut self.addr);
-        //             // });
-        //             // let mut dummy = false;
-        //             // ui.checkbox(&mut dummy, "checkbox");
-        //             //     ui.label("Write something  : ");
-        //             //     ui.text_edit_singleline(&mut self.addr);
-        //
-        //             ui.horizontal(|ui| {
-        //                 ui.label("server:");
-        //                 ui.text_edit_singleline(&mut self.addr);
-        //             });
-        //         });
-        //
-        //         ui.horizontal(|ui| {
-        //             ui.label("password:");
-        //             ui.add(password(&mut self.password));
-        //         });
-        //
-        //         // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-        //         if ui.button("Login").clicked() {}
-        //
-        //         ui.separator();
-        //
-        //         ui.add(egui::github_link_file!(
-        //             "https://github.com/emilk/eframe_template/blob/master/",
-        //             "Source code."
-        //         ));
-        //     });
-        // });
 
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
             powered_by_egui_and_eframe(ui);
