@@ -1,26 +1,24 @@
 use crate::login;
+use crate::proto::GeneralResponse;
+use eframe::epaint::text::{FontData, FontDefinitions};
+use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use eframe::epaint::FontFamily;
-use eframe::epaint::text::{FontData, FontDefinitions};
-use crate::proto::GeneralResponse;
 
 pub struct Resource {
     /// HTTP response
     pub(crate) response: ehttp::Response,
-    checked: bool
+    checked: bool,
 }
-
-
 
 impl Resource {
     fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
         Self {
             response,
-            checked: false
+            checked: false,
         }
     }
 }
@@ -28,7 +26,7 @@ impl Resource {
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum RequestType {
     Login,
-    Test
+    Test,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -64,7 +62,7 @@ impl Default for TemplateApp {
             is_dark_them: true,
             promise_map: HashMap::new(),
             cookies: Vec::new(),
-            need_check: Arc::new(Mutex::new(false))
+            need_check: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -126,7 +124,10 @@ impl TemplateApp {
         // 使用保存的 cookies
         let is_web = cfg!(target_arch = "wasm32");
         if !is_web {
-            request.headers.headers.push(("Cookie".into(), self.cookies.join(";")));
+            request
+                .headers
+                .headers
+                .push(("Cookie".into(), self.cookies.join(";")));
         }
 
         let need_check = self.need_check.clone();
@@ -153,7 +154,9 @@ impl TemplateApp {
                         resource.checked = false;
                         let ref response = resource.response;
                         if response.ok {
-                            if let Ok(response) = serde_json::from_slice::<GeneralResponse>(&response.bytes) {
+                            if let Ok(response) =
+                                serde_json::from_slice::<GeneralResponse>(&response.bytes)
+                            {
                                 if response.code == 10086 {
                                     self.logout();
                                     break;
@@ -198,15 +201,15 @@ impl eframe::App for TemplateApp {
                 // NOTE: no File->Quit on web pages!
                 // let is_web = cfg!(target_arch = "wasm32");
                 // if !is_web {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                        if ui.button("Test").clicked() {
-                            self.http_request(ctx, RequestType::Test, "test_auth", None, Vec::new());
-                        }
-                    });
-                    ui.add_space(16.0);
+                ui.menu_button("File", |ui| {
+                    if ui.button("Quit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                    if ui.button("Test").clicked() {
+                        self.http_request(ctx, RequestType::Test, "test_auth", None, Vec::new());
+                    }
+                });
+                ui.add_space(16.0);
                 // }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
@@ -217,7 +220,6 @@ impl eframe::App for TemplateApp {
         // if !self.logged_in {
         login::ui(ctx, self);
         // }
-
 
         // egui::CentralPanel::default().show(ctx, |ui| {
         //     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {

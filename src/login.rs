@@ -1,10 +1,9 @@
-use log::{error, info};
 use crate::app::RequestType;
 use crate::password::password;
 use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
+use log::{error, info};
 use regex::Regex;
-
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
     egui::Window::new("Login")
@@ -50,13 +49,13 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
                             Ok(resource) => {
                                 let ref response = resource.response;
                                 if response.ok {
-                                    match serde_json::from_slice::<GeneralResponse>(&response.bytes) {
+                                    match serde_json::from_slice::<GeneralResponse>(&response.bytes)
+                                    {
                                         Ok(ack) => {
                                             if ack.code == 0 {
                                                 info!("login success");
                                                 app.login_success(extract_cookies(response));
-                                            }
-                                            else {
+                                            } else {
                                                 ui.colored_label(
                                                     ui.visuals().error_fg_color,
                                                     ack.msg,
@@ -100,10 +99,12 @@ pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
         });
 }
 
-
 // 提取响应中的 Set-Cookie 头部
 fn extract_cookies(response: &ehttp::Response) -> Vec<String> {
-    response.headers.headers.iter()
+    response
+        .headers
+        .headers
+        .iter()
         .filter_map(|(name, value)| {
             if name.eq_ignore_ascii_case("Set-Cookie") {
                 // 使用正则表达式查找cookie名称和值
