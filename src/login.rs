@@ -2,7 +2,7 @@ use crate::app::RequestType;
 use crate::password::password;
 use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
-use log::{error, info};
+use log::info;
 use regex::Regex;
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {

@@ -5,7 +5,6 @@ use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub struct Resource {
