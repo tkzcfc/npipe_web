@@ -5,7 +5,6 @@ use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub struct Resource {
@@ -348,6 +347,7 @@ fn load_fonts(ctx: &egui::Context) {
 // }
 //
 // fn find_cjk_font() -> Option<String> {
+//     use std::path::PathBuf;
 //     #[cfg(unix)]
 //     {
 //         use std::process::Command;
