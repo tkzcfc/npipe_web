@@ -1,5 +1,5 @@
 use crate::app::RequestType;
-use crate::password::password;
+use super::password::password;
 use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
 use log::info;
