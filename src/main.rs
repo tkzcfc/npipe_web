@@ -31,6 +31,13 @@ fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
+    if let Some(window) = web_sys::window() {
+        let document = window.document().expect("should have a document on window");
+        if let Some(element) = document.get_element_by_id("center_text") {
+            element.set_inner_html(""); // Remove the loading animation
+        }
+    }
+
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async {
