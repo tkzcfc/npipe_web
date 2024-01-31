@@ -1,10 +1,12 @@
 use super::password::password;
-use crate::app::RequestType;
 use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
 use egui::{Align2, Ui};
 use log::info;
+use once_cell::sync::Lazy;
 use regex::Regex;
+
+static KEY_LOGIN: Lazy<String> = Lazy::new(|| String::from("login"));
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
     let pos = egui::pos2(
@@ -41,21 +43,20 @@ fn render_content(ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
         });
 
         ui.separator();
-        if ui.button("Login").clicked() && app.can_request(&RequestType::Login) {
+        if ui.button("Login").clicked() && app.can_request(&KEY_LOGIN) {
             let req = LoginReq {
                 username: app.username.clone(),
                 password: app.password.clone(),
             };
             app.http_request(
                 ctx,
-                RequestType::Login,
-                "login",
+                KEY_LOGIN.as_str(),
                 None,
                 serde_json::to_string(&req).unwrap().into(),
             );
         }
 
-        if let Some(promise) = app.promise_map.get(&RequestType::Login) {
+        if let Some(promise) = app.promise_map.get(&*KEY_LOGIN) {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok(resource) => {

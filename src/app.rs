@@ -22,13 +22,6 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub enum RequestType {
-    Login,
-    Test,
-    Logout,
-}
-
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct TemplateApp {
@@ -46,7 +39,7 @@ pub struct TemplateApp {
     pub(crate) cookies: Vec<String>,
 
     #[serde(skip)]
-    pub(crate) promise_map: HashMap<RequestType, Promise<ehttp::Result<Resource>>>,
+    pub(crate) promise_map: HashMap<String, Promise<ehttp::Result<Resource>>>,
 
     #[serde(skip)]
     need_check: Arc<Mutex<bool>>,
@@ -97,7 +90,7 @@ impl TemplateApp {
         app
     }
 
-    pub fn can_request(&mut self, request_type: &RequestType) -> bool {
+    pub fn can_request(&mut self, request_type: &String) -> bool {
         if let Some(promise) = self.promise_map.get(request_type) {
             promise.ready().is_some()
         } else {
@@ -108,7 +101,6 @@ impl TemplateApp {
     pub fn http_request(
         &mut self,
         ctx: &egui::Context,
-        request_type: RequestType,
         path: &str,
         params: Option<HashMap<String, String>>,
         body: Vec<u8>,
@@ -150,7 +142,7 @@ impl TemplateApp {
             sender.send(resource);
         });
 
-        self.promise_map.insert(request_type, promise);
+        self.promise_map.insert(path.to_string(), promise);
     }
 
     fn http_response_check(&mut self) {
@@ -219,13 +211,7 @@ impl eframe::App for TemplateApp {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
                         if ui.button("Test").clicked() {
-                            self.http_request(
-                                ctx,
-                                RequestType::Test,
-                                "test_auth",
-                                None,
-                                Vec::new(),
-                            );
+                            self.http_request(ctx, "test_auth", None, Vec::new());
                         }
                     });
                     ui.add_space(16.0);
@@ -240,8 +226,8 @@ impl eframe::App for TemplateApp {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.heading("Welcome");
 
-                if ui.button("logout").clicked() && self.can_request(&RequestType::Logout) {
-                    self.http_request(ctx, RequestType::Logout, "logout", None, Vec::new());
+                if ui.button("logout").clicked() && self.can_request(&"logout".into()) {
+                    self.http_request(ctx, "logout", None, Vec::new());
                 }
             });
 

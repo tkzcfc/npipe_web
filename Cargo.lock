@@ -1672,6 +1672,7 @@ dependencies = [
  "ehttp",
  "env_logger",
  "log",
+ "once_cell",
  "poll-promise",
  "regex",
  "serde",
