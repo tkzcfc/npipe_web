@@ -1,8 +1,8 @@
 use super::password::password;
-use crate::proto::{GeneralResponse, LoginReq};
+use crate::proto;
+use crate::resource::ResponseType;
 use crate::TemplateApp;
 use egui::{Align2, Ui};
-use log::info;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -44,7 +44,7 @@ fn render_content(ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
 
         ui.separator();
         if ui.button("Login").clicked() && app.can_request(&KEY_LOGIN) {
-            let req = LoginReq {
+            let req = proto::LoginReq {
                 username: app.username.clone(),
                 password: app.password.clone(),
             };
@@ -59,34 +59,18 @@ fn render_content(ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
         if let Some(promise) = app.promise_map.get(&*KEY_LOGIN) {
             if let Some(result) = promise.ready() {
                 match result {
-                    Ok(resource) => {
-                        let ref response = resource.response;
-                        if response.ok {
-                            match serde_json::from_slice::<GeneralResponse>(&response.bytes) {
-                                Ok(ack) => {
-                                    if ack.code == 0 {
-                                        info!("login success");
-                                        app.login_success(extract_cookies(response));
-                                    } else {
-                                        ui.colored_label(ui.visuals().error_fg_color, ack.msg);
-                                    }
-                                }
-                                Err(err) => {
-                                    ui.colored_label(ui.visuals().error_fg_color, err.to_string());
-                                }
-                            }
-                        } else {
-                            ui.colored_label(
-                                ui.visuals().error_fg_color,
-                                format!(
-                                    "status:       {} ({})",
-                                    response.status, response.status_text
-                                ),
-                            );
+                    Ok(resource) => match &resource.response_data {
+                        ResponseType::GeneralResponse(_) => {
+                            app.login_success(extract_cookies(&resource.response));
                         }
-                    }
+                        ResponseType::Error(err) => {
+                            ui.colored_label(ui.visuals().error_fg_color, err);
+                        }
+                        _ => {
+                            ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
+                        }
+                    },
                     Err(error) => {
-                        // This should only happen if the fetch API isn't available or something similar.
                         ui.colored_label(
                             ui.visuals().error_fg_color,
                             if error.is_empty() {

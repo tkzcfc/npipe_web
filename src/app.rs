@@ -1,26 +1,12 @@
 use crate::proto::GeneralResponse;
 use crate::render;
+use crate::resource::Resource;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
-pub struct Resource {
-    /// HTTP response
-    pub(crate) response: ehttp::Response,
-    checked: bool,
-}
-
-impl Resource {
-    fn from_response(_ctx: &egui::Context, response: ehttp::Response) -> Self {
-        Self {
-            response,
-            checked: false,
-        }
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -132,13 +118,15 @@ impl TemplateApp {
                 .push(("Cookie".into(), self.cookies.join(";")));
         }
 
+        let path_moved = path.to_string();
         let need_check = self.need_check.clone();
         let ctx = ctx.clone();
         let (sender, promise) = Promise::new();
         ehttp::fetch(request, move |response| {
             ctx.request_repaint(); // wake up UI thread
             *need_check.lock().unwrap() = true;
-            let resource = response.map(|response| Resource::from_response(&ctx, response));
+            let resource =
+                response.map(|response| Resource::from_response(&ctx, response, path_moved));
             sender.send(resource);
         });
 
