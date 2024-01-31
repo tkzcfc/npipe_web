@@ -1,104 +1,106 @@
-use crate::app::RequestType;
 use super::password::password;
+use crate::app::RequestType;
 use crate::proto::{GeneralResponse, LoginReq};
 use crate::TemplateApp;
+use egui::{Align2, Ui};
 use log::info;
 use regex::Regex;
 
 pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
+    let pos = egui::pos2(
+        ctx.screen_rect().width() * 0.5,
+        ctx.screen_rect().height() * 0.5,
+    );
     egui::Window::new("Login")
         .vscroll(false)
         .hscroll(false)
         .resizable(false)
         .collapsible(false)
-        .show(ctx, |ui| {
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                if app.can_modify_api_url {
-                    ui.horizontal(|ui| {
-                        ui.label("api url:");
-                        ui.text_edit_singleline(&mut app.api_url);
-                    });
-                }
+        .pivot(Align2::CENTER_CENTER)
+        .fixed_pos(pos)
+        .show(ctx, |ui| render_content(ui, ctx, app));
+}
 
-                ui.horizontal(|ui| {
-                    ui.label("username:");
-                    ui.text_edit_singleline(&mut app.username);
-                });
+fn render_content(ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
+    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        if app.can_modify_api_url {
+            ui.horizontal(|ui| {
+                ui.label("api url:");
+                ui.text_edit_singleline(&mut app.api_url);
+            });
+        }
 
-                ui.horizontal(|ui| {
-                    ui.label("password:");
-                    ui.add(password(&mut app.password));
-                });
+        ui.horizontal(|ui| {
+            ui.label("username:");
+            ui.text_edit_singleline(&mut app.username);
+        });
 
-                ui.separator();
-                if ui.button("Login").clicked() && app.can_request(&RequestType::Login) {
-                    let req = LoginReq {
-                        username: app.username.clone(),
-                        password: app.password.clone(),
-                    };
-                    app.http_request(
-                        ctx,
-                        RequestType::Login,
-                        "login",
-                        None,
-                        serde_json::to_string(&req).unwrap().into(),
-                    );
-                }
+        ui.horizontal(|ui| {
+            ui.label("password:");
+            ui.add(password(&mut app.password));
+        });
 
-                if let Some(promise) = app.promise_map.get(&RequestType::Login) {
-                    if let Some(result) = promise.ready() {
-                        match result {
-                            Ok(resource) => {
-                                let ref response = resource.response;
-                                if response.ok {
-                                    match serde_json::from_slice::<GeneralResponse>(&response.bytes)
-                                    {
-                                        Ok(ack) => {
-                                            if ack.code == 0 {
-                                                info!("login success");
-                                                app.login_success(extract_cookies(response));
-                                            } else {
-                                                ui.colored_label(
-                                                    ui.visuals().error_fg_color,
-                                                    ack.msg,
-                                                );
-                                            }
-                                        }
-                                        Err(err) => {
-                                            ui.colored_label(
-                                                ui.visuals().error_fg_color,
-                                                err.to_string(),
-                                            );
-                                        }
+        ui.separator();
+        if ui.button("Login").clicked() && app.can_request(&RequestType::Login) {
+            let req = LoginReq {
+                username: app.username.clone(),
+                password: app.password.clone(),
+            };
+            app.http_request(
+                ctx,
+                RequestType::Login,
+                "login",
+                None,
+                serde_json::to_string(&req).unwrap().into(),
+            );
+        }
+
+        if let Some(promise) = app.promise_map.get(&RequestType::Login) {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(resource) => {
+                        let ref response = resource.response;
+                        if response.ok {
+                            match serde_json::from_slice::<GeneralResponse>(&response.bytes) {
+                                Ok(ack) => {
+                                    if ack.code == 0 {
+                                        info!("login success");
+                                        app.login_success(extract_cookies(response));
+                                    } else {
+                                        ui.colored_label(ui.visuals().error_fg_color, ack.msg);
                                     }
-                                } else {
-                                    ui.colored_label(
-                                        ui.visuals().error_fg_color,
-                                        format!(
-                                            "status:       {} ({})",
-                                            response.status, response.status_text
-                                        ),
-                                    );
+                                }
+                                Err(err) => {
+                                    ui.colored_label(ui.visuals().error_fg_color, err.to_string());
                                 }
                             }
-                            Err(error) => {
-                                // This should only happen if the fetch API isn't available or something similar.
-                                ui.colored_label(
-                                    ui.visuals().error_fg_color,
-                                    if error.is_empty() {
-                                        "Login failed"
-                                    } else {
-                                        error
-                                    },
-                                );
-                            }
+                        } else {
+                            ui.colored_label(
+                                ui.visuals().error_fg_color,
+                                format!(
+                                    "status:       {} ({})",
+                                    response.status, response.status_text
+                                ),
+                            );
                         }
-                    } else {
-                        ui.spinner();
+                    }
+                    Err(error) => {
+                        // This should only happen if the fetch API isn't available or something similar.
+                        ui.colored_label(
+                            ui.visuals().error_fg_color,
+                            if error.is_empty() {
+                                "Login failed"
+                            } else {
+                                error
+                            },
+                        );
                     }
                 }
-            });
-        });
+            } else {
+                ui.spinner();
+            }
+        }
+    });
 }
 
 // 提取响应中的 Set-Cookie 头部

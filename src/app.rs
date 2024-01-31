@@ -1,11 +1,11 @@
 use crate::proto::GeneralResponse;
+use crate::render;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use crate::render;
 
 pub struct Resource {
     /// HTTP response
@@ -243,9 +243,10 @@ impl eframe::App for TemplateApp {
                 if ui.button("logout").clicked() && self.can_request(&RequestType::Logout) {
                     self.http_request(ctx, RequestType::Logout, "logout", None, Vec::new());
                 }
-
-
             });
+
+            render::player::ui(ctx, self);
+            render::channel::ui(ctx, self);
         } else {
             render::login::ui(ctx, self);
         }
