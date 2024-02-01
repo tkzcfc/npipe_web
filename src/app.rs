@@ -1,12 +1,20 @@
 use crate::proto::GeneralResponse;
 use crate::render;
+use crate::render::RenderUI;
 use crate::resource::Resource;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
 use poll_promise::Promise;
 use serde_urlencoded;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+
+pub struct SubPage {
+    render: Rc<RefCell<dyn RenderUI>>,
+    name: String,
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -32,6 +40,13 @@ pub struct TemplateApp {
 
     #[serde(skip)]
     pub(crate) can_modify_api_url: bool,
+
+    #[serde(skip)]
+    sub_pages: Vec<SubPage>,
+    #[serde(skip)]
+    cur_page_index: usize,
+    #[serde(skip)]
+    login_ui: Rc<RefCell<dyn RenderUI>>,
 }
 
 impl Default for TemplateApp {
@@ -46,6 +61,18 @@ impl Default for TemplateApp {
             cookies: Vec::new(),
             need_check: Arc::new(Mutex::new(false)),
             can_modify_api_url: true,
+            login_ui: Rc::new(RefCell::new(render::login::Logic::new())),
+            cur_page_index: 0,
+            sub_pages: vec![
+                SubPage {
+                    name: "Player".into(),
+                    render: Rc::new(RefCell::new(render::player::Logic::new())),
+                },
+                SubPage {
+                    name: "Channel".into(),
+                    render: Rc::new(RefCell::new(render::channel::Logic::new())),
+                },
+            ],
         }
     }
 }
@@ -84,10 +111,11 @@ impl TemplateApp {
         }
     }
 
-    pub fn http_request(
+    pub fn http_request_ex(
         &mut self,
         ctx: &egui::Context,
         path: &str,
+        key: String,
         params: Option<HashMap<String, String>>,
         body: Vec<u8>,
     ) {
@@ -130,7 +158,17 @@ impl TemplateApp {
             sender.send(resource);
         });
 
-        self.promise_map.insert(path.to_string(), promise);
+        self.promise_map.insert(key, promise);
+    }
+
+    pub fn http_request(
+        &mut self,
+        ctx: &egui::Context,
+        path: &str,
+        params: Option<HashMap<String, String>>,
+        body: Vec<u8>,
+    ) {
+        self.http_request_ex(ctx, path, path.to_string(), params, body);
     }
 
     fn http_response_check(&mut self) {
@@ -166,6 +204,9 @@ impl TemplateApp {
 
     /// 登录成功
     pub fn login_success(&mut self, cookies: Vec<String>) {
+        for ref page in &self.sub_pages {
+            page.render.borrow_mut().reset();
+        }
         self.promise_map.clear();
         self.logged_in = true;
         self.cookies = cookies;
@@ -193,36 +234,47 @@ impl eframe::App for TemplateApp {
             egui::menu::bar(ui, |ui| {
                 // NOTE: no File->Quit on web pages!
                 let is_web = cfg!(target_arch = "wasm32");
-                if !is_web {
-                    ui.menu_button("File", |ui| {
+
+                ui.menu_button("Tools", |ui| {
+                    if !is_web {
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
-                        if ui.button("Test").clicked() {
-                            self.http_request(ctx, "test_auth", None, Vec::new());
+                        if self.logged_in {
+                            if ui.button("Logout").clicked() && self.can_request(&"logout".into()) {
+                                self.http_request(ctx, "logout", None, Vec::new());
+                            }
                         }
-                    });
-                    ui.add_space(16.0);
-                }
+                    }
+                    if ui.button("Test").clicked() {
+                        self.http_request(ctx, "test_auth", None, Vec::new());
+                    }
+                });
+                ui.add_space(16.0);
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
                 self.is_dark_them = ctx.style().visuals.dark_mode;
             });
+
+            ui.horizontal_wrapped(|ui| {
+                ui.visuals_mut().button_frame = false;
+                for (index, page) in self.sub_pages.iter().enumerate() {
+                    if ui
+                        .selectable_label(self.cur_page_index == index, &page.name)
+                        .clicked()
+                    {
+                        self.cur_page_index = index;
+                    }
+                }
+            });
         });
 
         if self.logged_in {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.heading("Welcome");
-
-                if ui.button("logout").clicked() && self.can_request(&"logout".into()) {
-                    self.http_request(ctx, "logout", None, Vec::new());
-                }
-            });
-
-            render::player::ui(ctx, self);
-            render::channel::ui(ctx, self);
+            if let Some(page) = self.sub_pages.get(self.cur_page_index) {
+                page.render.clone().borrow_mut().render(ctx, self);
+            }
         } else {
-            render::login::ui(ctx, self);
+            self.login_ui.clone().borrow_mut().render(ctx, self);
         }
 
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {

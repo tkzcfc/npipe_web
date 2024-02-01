@@ -1,91 +1,106 @@
 use super::password::password;
 use crate::proto;
+use crate::render::RenderUI;
 use crate::resource::ResponseType;
 use crate::TemplateApp;
 use egui::{Align2, Ui};
-use once_cell::sync::Lazy;
+use log::Log;
 use regex::Regex;
 
-static KEY_LOGIN: Lazy<String> = Lazy::new(|| String::from("login"));
-
-pub fn ui(ctx: &egui::Context, app: &mut TemplateApp) {
-    let pos = egui::pos2(
-        ctx.screen_rect().width() * 0.5,
-        ctx.screen_rect().height() * 0.5,
-    );
-    egui::Window::new("Login")
-        .vscroll(false)
-        .hscroll(false)
-        .resizable(false)
-        .collapsible(false)
-        .pivot(Align2::CENTER_CENTER)
-        .fixed_pos(pos)
-        .show(ctx, |ui| render_content(ui, ctx, app));
+pub struct Logic {
+    key_login: String,
 }
 
-fn render_content(ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
-    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-        if app.can_modify_api_url {
-            ui.horizontal(|ui| {
-                ui.label("api url:");
-                ui.text_edit_singleline(&mut app.api_url);
-            });
+impl Logic {
+    pub fn new() -> Self {
+        Self {
+            key_login: "login".into(),
         }
+    }
+}
 
-        ui.horizontal(|ui| {
-            ui.label("username:");
-            ui.text_edit_singleline(&mut app.username);
-        });
+impl RenderUI for Logic {
+    fn render(&mut self, ctx: &egui::Context, app: &mut TemplateApp) {
+        let pos = egui::pos2(
+            ctx.screen_rect().width() * 0.5,
+            ctx.screen_rect().height() * 0.5,
+        );
+        egui::Window::new("Login")
+            .vscroll(false)
+            .hscroll(false)
+            .resizable(false)
+            .collapsible(false)
+            .pivot(Align2::CENTER_CENTER)
+            .fixed_pos(pos)
+            .show(ctx, |ui| self.render_content(ui, ctx, app));
+    }
+}
 
-        ui.horizontal(|ui| {
-            ui.label("password:");
-            ui.add(password(&mut app.password));
-        });
-
-        ui.separator();
-        if ui.button("Login").clicked() && app.can_request(&KEY_LOGIN) {
-            let req = proto::LoginReq {
-                username: app.username.clone(),
-                password: app.password.clone(),
-            };
-            app.http_request(
-                ctx,
-                KEY_LOGIN.as_str(),
-                None,
-                serde_json::to_string(&req).unwrap().into(),
-            );
-        }
-
-        if let Some(promise) = app.promise_map.get(&*KEY_LOGIN) {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(resource) => match &resource.response_data {
-                        ResponseType::GeneralResponse(_) => {
-                            app.login_success(extract_cookies(&resource.response));
-                        }
-                        ResponseType::Error(err) => {
-                            ui.colored_label(ui.visuals().error_fg_color, err);
-                        }
-                        _ => {
-                            ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
-                        }
-                    },
-                    Err(error) => {
-                        ui.colored_label(
-                            ui.visuals().error_fg_color,
-                            if error.is_empty() {
-                                "Login failed"
-                            } else {
-                                error
-                            },
-                        );
-                    }
-                }
-            } else {
-                ui.spinner();
+impl Logic {
+    fn render_content(&self, ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            if app.can_modify_api_url {
+                ui.horizontal(|ui| {
+                    ui.label("api url:");
+                    ui.text_edit_singleline(&mut app.api_url);
+                });
             }
-        }
-    });
+
+            ui.horizontal(|ui| {
+                ui.label("username:");
+                ui.text_edit_singleline(&mut app.username);
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("password:");
+                ui.add(password(&mut app.password));
+            });
+
+            ui.separator();
+            if ui.button("Login").clicked() && app.can_request(&self.key_login) {
+                let req = proto::LoginReq {
+                    username: app.username.clone(),
+                    password: app.password.clone(),
+                };
+                app.http_request(
+                    ctx,
+                    &self.key_login,
+                    None,
+                    serde_json::to_string(&req).unwrap().into(),
+                );
+            }
+
+            if let Some(promise) = app.promise_map.get(&self.key_login) {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(resource) => match &resource.response_data {
+                            ResponseType::GeneralResponse(_) => {
+                                app.login_success(extract_cookies(&resource.response));
+                            }
+                            ResponseType::Error(err) => {
+                                ui.colored_label(ui.visuals().error_fg_color, err);
+                            }
+                            _ => {
+                                ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
+                            }
+                        },
+                        Err(error) => {
+                            ui.colored_label(
+                                ui.visuals().error_fg_color,
+                                if error.is_empty() {
+                                    "Login failed"
+                                } else {
+                                    error
+                                },
+                            );
+                        }
+                    }
+                } else {
+                    ui.spinner();
+                }
+            }
+        });
+    }
 }
 
 // 提取响应中的 Set-Cookie 头部

@@ -14,8 +14,16 @@ pub struct GeneralResponse {
     pub code: i32,
 }
 
-/// 玩家列表子项
+/// 玩家列表回复
 #[derive(Serialize, Deserialize)]
+pub struct PlayerListRequest {
+    // 页码  从1开始
+    pub page_number: u32,
+    pub page_size: u32,
+}
+
+/// 玩家列表子项
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PlayerListItem {
     pub id: u32,
     pub username: String,
@@ -24,9 +32,11 @@ pub struct PlayerListItem {
 }
 
 /// 玩家列表回复
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PlayerListResponse {
     pub players: Vec<PlayerListItem>,
+    pub cur_page_number: u32,
+    pub total_count: u32,
 }
 
 /// 删除玩家

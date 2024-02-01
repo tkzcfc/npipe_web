@@ -50,10 +50,17 @@ impl Resource {
                 },
             }
         } else {
-            ResponseType::Error(format!(
-                "status:       {} ({})",
-                response.status, response.status_text
-            ))
+            if let Some(text) = response.text() {
+                ResponseType::Error(format!(
+                    "status:       {} ({})\nerror:        {}",
+                    response.status, response.status_text, text
+                ))
+            } else {
+                ResponseType::Error(format!(
+                    "status:       {} ({})",
+                    response.status, response.status_text
+                ))
+            }
         };
 
         Self {
