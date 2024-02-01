@@ -43,6 +43,12 @@ impl RenderUI for Logic {
             self.render_content(ui, ctx, app);
         });
     }
+
+    fn reset(&mut self) {
+        self.data = None;
+        self.update_item_id = INVALID_ITEM_ID;
+        self.wait_player_list = false;
+    }
 }
 
 impl Logic {
