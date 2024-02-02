@@ -243,14 +243,14 @@ impl eframe::App for TemplateApp {
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
-                        if self.logged_in {
-                            if ui.button("Logout").clicked() && self.can_request(&"logout".into()) {
-                                self.http_request(ctx, "logout", None, Vec::new());
-                            }
+                        if ui.button("Test").clicked() {
+                            self.http_request(ctx, "test_auth", None, Vec::new());
                         }
                     }
-                    if ui.button("Test").clicked() {
-                        self.http_request(ctx, "test_auth", None, Vec::new());
+                    if self.logged_in {
+                        if ui.button("Logout").clicked() && self.can_request(&"logout".into()) {
+                            self.http_request(ctx, "logout", None, Vec::new());
+                        }
                     }
                 });
                 ui.add_space(16.0);
