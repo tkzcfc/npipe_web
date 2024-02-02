@@ -205,6 +205,13 @@ impl TemplateApp {
                         }
                     }
                 }
+                else {
+                    if key == "logout" {
+                        info!("logout code: 0");
+                        self.logout();
+                        break;
+                    }
+                }
             }
         }
 
