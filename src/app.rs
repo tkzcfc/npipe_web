@@ -4,6 +4,7 @@ use crate::render::RenderUI;
 use crate::resource::Resource;
 use eframe::epaint::text::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
+use log::info;
 use poll_promise::Promise;
 use serde_urlencoded;
 use std::cell::RefCell;
@@ -186,11 +187,13 @@ impl TemplateApp {
                                 serde_json::from_slice::<GeneralResponse>(&response.bytes)
                             {
                                 if response.code == 10086 {
+                                    info!("logout code: 10086");
                                     self.logout();
                                     break;
                                 }
                             }
                         } else if response.status == 401 {
+                            info!("logout code: 401");
                             self.logout();
                             break;
                         }
