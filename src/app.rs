@@ -176,7 +176,7 @@ impl TemplateApp {
         if *self.need_check.lock().unwrap() == false {
             return;
         }
-        for value in self.promise_map.values_mut() {
+        for (key, value) in &mut self.promise_map {
             if let Some(result) = value.ready_mut() {
                 if let Ok(resource) = result {
                     if !resource.checked {
@@ -194,6 +194,12 @@ impl TemplateApp {
                             }
                         } else if response.status == 401 {
                             info!("logout code: 401");
+                            self.logout();
+                            break;
+                        }
+
+                        if key == "logout" {
+                            info!("logout code: 0");
                             self.logout();
                             break;
                         }
@@ -248,9 +254,8 @@ impl eframe::App for TemplateApp {
                         }
                     }
                     if self.logged_in {
-                        if ui.button("Logout").clicked() {
+                        if ui.button("Logout").clicked() && self.can_request(&"logout".into()) {
                             self.http_request(ctx, "logout", None, Vec::new());
-                            self.logout();
                         }
                     }
                 });
