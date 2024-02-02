@@ -43,7 +43,7 @@ impl Resource {
                         if data.code == 0 {
                             ResponseType::GeneralResponse(data)
                         } else {
-                            ResponseType::Error(format!("code:       {}({})", data.code, data.msg))
+                            ResponseType::Error(format!("code:{} ({})", data.code, data.msg))
                         }
                     }
                     Err(err) => ResponseType::Error(format!("json decode: {}", err.to_string())),
@@ -52,12 +52,12 @@ impl Resource {
         } else {
             if let Some(text) = response.text() {
                 ResponseType::Error(format!(
-                    "status:       {} ({})\nerror:        {}",
+                    "status:{} ({})\nerror:        {}",
                     response.status, response.status_text, text
                 ))
             } else {
                 ResponseType::Error(format!(
-                    "status:       {} ({})",
+                    "status:{} ({})",
                     response.status, response.status_text
                 ))
             }
