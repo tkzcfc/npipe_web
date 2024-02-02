@@ -2,7 +2,7 @@ use crate::proto::PlayerListResponse;
 use crate::render::RenderUI;
 use crate::resource::ResponseType;
 use crate::{proto, TemplateApp};
-use eframe::emath::{vec2, Align2};
+use eframe::emath::vec2;
 use eframe::epaint::Color32;
 use egui::{Rect, Ui};
 use egui_extras::{Column, TableBuilder};
@@ -387,6 +387,7 @@ impl Logic {
     }
 
     fn render_create_window(&mut self, ctx: &egui::Context, app: &mut TemplateApp, enabled: bool) {
+        let mut request_finish = false;
         egui::Window::new("New Player")
             .vscroll(true)
             .hscroll(true)
@@ -406,9 +407,60 @@ impl Logic {
                 });
                 ui.separator();
                 ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                    if ui.button("   ok   ").clicked() {}
+                    if ui.button("   ok   ").clicked() && app.can_request(&self.key_add_item) {
+                        let req = proto::PlayerAddReq {
+                            username: self.create_data.username.clone(),
+                            password: self.create_data.password.clone(),
+                        };
+                        app.http_request(
+                            ctx,
+                            &self.key_add_item,
+                            None,
+                            serde_json::to_string(&req).unwrap().into(),
+                        );
+                    }
+
+                    if let Some(promise) = app.promise_map.get(&self.key_add_item) {
+                        if let Some(result) = promise.ready() {
+                            match result {
+                                Ok(resource) => match &resource.response_data {
+                                    ResponseType::GeneralResponse(_) => {
+                                        request_finish = true;
+                                        app.promise_map.remove(&self.key_add_item);
+                                    }
+                                    ResponseType::Error(err) => {
+                                        ui.colored_label(ui.visuals().error_fg_color, err);
+                                    }
+                                    _ => {
+                                        ui.colored_label(
+                                            ui.visuals().error_fg_color,
+                                            "Unknown error",
+                                        );
+                                    }
+                                },
+                                Err(error) => {
+                                    ui.colored_label(
+                                        ui.visuals().error_fg_color,
+                                        if error.is_empty() {
+                                            "Login failed"
+                                        } else {
+                                            error
+                                        },
+                                    );
+                                }
+                            }
+                        } else {
+                            ui.spinner();
+                        }
+                    }
                 });
             });
+
+        if request_finish {
+            self.show_create_window = false;
+            self.create_data.username.clear();
+            self.create_data.password.clear();
+        }
     }
 
     fn busy(&mut self, app: &mut TemplateApp) -> bool {
