@@ -432,20 +432,20 @@ impl Logic {
             .enabled(enabled)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("source:");
+                    ui.label("source     :");
                     ui.text_edit_singleline(&mut self.create_data.source);
                 });
 
                 ui.horizontal(|ui| {
-                    ui.label("endpoint:");
+                    ui.label("endpoint   :");
                     ui.text_edit_singleline(&mut self.create_data.endpoint);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("sender:");
+                    ui.label("sender     :");
                     render_number_u32(ui, &mut self.create_data.sender);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("receiver:");
+                    ui.label("receiver   :");
                     render_number_u32(ui, &mut self.create_data.receiver);
                 });
                 ui.horizontal(|ui| {

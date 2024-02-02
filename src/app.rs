@@ -248,8 +248,9 @@ impl eframe::App for TemplateApp {
                         }
                     }
                     if self.logged_in {
-                        if ui.button("Logout").clicked() && self.can_request(&"logout".into()) {
+                        if ui.button("Logout").clicked() {
                             self.http_request(ctx, "logout", None, Vec::new());
+                            self.logout();
                         }
                     }
                 });
@@ -259,17 +260,19 @@ impl eframe::App for TemplateApp {
                 self.is_dark_them = ctx.style().visuals.dark_mode;
             });
 
-            ui.horizontal_wrapped(|ui| {
-                ui.visuals_mut().button_frame = false;
-                for (index, page) in self.sub_pages.iter().enumerate() {
-                    if ui
-                        .selectable_label(self.cur_page_index == index, &page.name)
-                        .clicked()
-                    {
-                        self.cur_page_index = index;
+            if self.logged_in {
+                ui.horizontal_wrapped(|ui| {
+                    ui.visuals_mut().button_frame = false;
+                    for (index, page) in self.sub_pages.iter().enumerate() {
+                        if ui
+                            .selectable_label(self.cur_page_index == index, &page.name)
+                            .clicked()
+                        {
+                            self.cur_page_index = index;
+                        }
                     }
-                }
-            });
+                });
+            }
         });
 
         if self.logged_in {
