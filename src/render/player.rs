@@ -2,12 +2,22 @@ use crate::proto::PlayerListResponse;
 use crate::render::RenderUI;
 use crate::resource::ResponseType;
 use crate::{proto, TemplateApp};
+use eframe::emath::vec2;
 use eframe::epaint::Color32;
-use egui::Ui;
+use egui::{Rect, Ui};
 use egui_extras::{Column, TableBuilder};
+use std::collections::HashMap;
 
-static PAGE_SIZE: u32 = 10;
+static PAGE_SIZE: u32 = 20;
 static INVALID_ITEM_ID: u32 = u32::MAX;
+
+static GRAY: Color32 = Color32::from_rgba_premultiplied(80, 80, 80, 80);
+
+enum OperationResult {
+    None,
+    Wait,
+    Error(String),
+}
 
 pub struct Logic {
     key_get_list: String,
@@ -15,8 +25,7 @@ pub struct Logic {
     key_add_item: String,
     key_update_item: String,
 
-    // 正在更新的id
-    update_item_id: u32,
+    item_operation_map: HashMap<String, (u32, OperationResult)>,
 
     // 是否正在等待玩家列表数据刷新
     wait_player_list: bool,
@@ -32,7 +41,7 @@ impl Logic {
             key_update_item: "update_player".into(),
             wait_player_list: false,
             data: None,
-            update_item_id: INVALID_ITEM_ID,
+            item_operation_map: HashMap::new(),
         }
     }
 }
@@ -41,13 +50,16 @@ impl RenderUI for Logic {
     fn render(&mut self, ctx: &egui::Context, app: &mut TemplateApp) {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.render_content(ui, ctx, app);
+            if self.busy(app) {
+                self.render_loading(ui);
+            }
         });
     }
 
     fn reset(&mut self) {
         self.data = None;
-        self.update_item_id = INVALID_ITEM_ID;
         self.wait_player_list = false;
+        self.item_operation_map.clear();
     }
 }
 
@@ -87,11 +99,8 @@ impl Logic {
                         );
                     }
                 }
-            } else {
-                ui.spinner();
             }
         } else {
-            ui.spinner();
             need_request = true;
         }
 
@@ -99,7 +108,7 @@ impl Logic {
         if let Some(ref mut player_list) = self.data {
             ui.horizontal(|ui| {
                 // 刷新按钮
-                if ui.button("refresh").clicked() {
+                if ui.button("🔃").clicked() {
                     need_request = true;
                 }
 
@@ -124,7 +133,7 @@ impl Logic {
                 }
             });
             ui.label(format!("total : {}", player_list.total_count));
-            self.render_table(ui, app);
+            self.render_table(ui, ctx, app);
         }
 
         if need_request {
@@ -142,18 +151,86 @@ impl Logic {
         }
     }
 
-    fn busy(&self, app: &mut TemplateApp) -> bool {
-        !app.can_request(&self.key_get_list)
-            || !app.can_request(&self.key_remove_item)
-            || !app.can_request(&self.key_add_item)
-            || !app.can_request(&self.key_update_item)
+    fn render_loading(&self, ui: &mut Ui) {
+        ui.painter().rect_filled(ui.max_rect(), 0.0, GRAY);
+
+        egui::Spinner::new().paint_at(
+            ui,
+            Rect::from_center_size(ui.max_rect().center(), vec2(30.0, 30.0)),
+        );
+
+        // 屏蔽下层输入
+        ui.interact(
+            ui.min_rect(),
+            egui::Id::new("Some Id"),
+            egui::Sense::click(),
+        );
     }
 
-    fn render_table(&mut self, ui: &mut Ui, app: &mut TemplateApp) {
+    fn busy(&mut self, app: &mut TemplateApp) -> bool {
+        let mut removed_id = None;
+        for (key, (id, operation_result)) in &mut self.item_operation_map {
+            if *id != INVALID_ITEM_ID {
+                let promise_option = app.promise_map.get(key);
+                if let Some(promise) = promise_option {
+                    if let Some(result) = promise.ready() {
+                        match result {
+                            Ok(resource) => match &resource.response_data {
+                                ResponseType::GeneralResponse(_) => {
+                                    if key == &self.key_remove_item {
+                                        removed_id = Some(*id);
+                                    }
+                                    *operation_result = OperationResult::None;
+                                    *id = INVALID_ITEM_ID;
+                                }
+                                ResponseType::Error(err) => {
+                                    *operation_result = OperationResult::Error(err.clone());
+                                }
+                                _ => {
+                                    *operation_result =
+                                        OperationResult::Error("Unknown error".into());
+                                }
+                            },
+                            Err(error) => {
+                                *operation_result = OperationResult::Error(if error.is_empty() {
+                                    "Request failed".into()
+                                } else {
+                                    error.to_string()
+                                });
+                            }
+                        }
+                    } else {
+                        *operation_result = OperationResult::Wait;
+                    }
+                } else {
+                    *operation_result = OperationResult::None;
+                    *id = INVALID_ITEM_ID;
+                }
+            }
+        }
+
+        if let Some(removed_id) = removed_id {
+            if let Some(data) = &mut self.data {
+                data.players.retain(|x| x.id != removed_id);
+                data.total_count -= 1;
+            }
+        }
+
+        !app.can_request(&self.key_get_list) || !app.can_request(&self.key_add_item)
+    }
+
+    fn render_table(&mut self, ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
+        let mut need_update_item_info = None;
+        let mut need_remove_item_info = None;
+
+        let update_item_operation = self.item_operation_map.get(&self.key_update_item);
+        let remove_item_operation = self.item_operation_map.get(&self.key_remove_item);
+
         let table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::auto())
             .column(Column::auto())
             .column(Column::auto())
             .column(Column::auto())
@@ -181,110 +258,145 @@ impl Logic {
                 header.col(|ui| {
                     ui.strong("update");
                 });
+                header.col(|ui| {
+                    ui.strong("remove");
+                });
             })
             .body(|mut body| {
-                if let Some(ref mut player_list) = self.data {
-                    for (index, player) in player_list.players.iter_mut().enumerate() {
+                if let Some(ref mut item_list) = self.data {
+                    for (index, item) in item_list.players.iter_mut().enumerate() {
                         body.row(20.0, |mut row| {
                             row.col(|ui| {
                                 ui.label(format!("{}", index + 1));
                             });
                             row.col(|ui| {
                                 if ui.button("📋").on_hover_text("copy").clicked() {
-                                    ui.output_mut(|o| o.copied_text = format!("{}", player.id));
+                                    ui.output_mut(|o| o.copied_text = format!("{}", item.id));
                                 }
-                                ui.label(format!("{}", player.id));
+                                ui.label(format!("{}", item.id));
                             });
                             row.col(|ui| {
                                 if ui.button("📋").on_hover_text("copy").clicked() {
-                                    ui.output_mut(|o| o.copied_text = player.username.clone());
+                                    ui.output_mut(|o| o.copied_text = item.username.clone());
                                 }
-                                ui.label(player.username.as_str());
+                                ui.label(item.username.as_str());
                             });
                             row.col(|ui| {
-                                // ui.add(password(&mut player.password));
-                                ui.text_edit_singleline(&mut player.password);
+                                // ui.add(password(&mut item.password));
+                                ui.text_edit_singleline(&mut item.password);
                             });
                             row.col(|ui| {
-                                if player.online {
+                                if item.online {
                                     ui.colored_label(Color32::GREEN, "online");
                                 } else {
                                     ui.colored_label(ui.visuals().error_fg_color, "offline");
                                 }
                             });
                             row.col(|ui| {
-                                // self.render_item_update(ui, player.id, app);
+                                if update_item_operation.is_none() {
+                                    if ui.button("🔄update").clicked() {
+                                        need_update_item_info = Some(item.clone());
+                                    }
+                                    return;
+                                }
+
+                                let (item_id, operation_result) = &update_item_operation.unwrap();
+
+                                if item_id == &INVALID_ITEM_ID {
+                                    if ui.button("🔄update").clicked() {
+                                        need_update_item_info = Some(item.clone());
+                                    }
+                                } else {
+                                    if item_id != &item.id {
+                                        return;
+                                    } else {
+                                        match operation_result {
+                                            OperationResult::Error(message) => {
+                                                if ui.button("🔄retry").clicked() {
+                                                    need_update_item_info = Some(item.clone());
+                                                }
+                                                ui.colored_label(
+                                                    ui.visuals().error_fg_color,
+                                                    message,
+                                                );
+                                            }
+                                            _ => {
+                                                ui.spinner();
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                            row.col(|ui| {
+                                // 没有正在删除的元素
+                                if remove_item_operation.is_none()
+                                    || remove_item_operation.unwrap().0 == INVALID_ITEM_ID
+                                {
+                                    if let Some(operation_result) = update_item_operation {
+                                        // 正在更新的元素不是当前元素，显示删除按钮
+                                        if operation_result.0 != item.id && ui.button("✖").clicked()
+                                        {
+                                            need_remove_item_info = Some(item.id);
+                                        }
+                                    } else {
+                                        if ui.button("✖").clicked() {
+                                            need_remove_item_info = Some(item.id);
+                                        }
+                                    }
+                                } else {
+                                    // 正在删除其他元素
+                                    if remove_item_operation.unwrap().0 != item.id {
+                                        return;
+                                    }
+
+                                    match &remove_item_operation.unwrap().1 {
+                                        OperationResult::Error(message) => {
+                                            if ui.button("✖").clicked() {
+                                                need_remove_item_info = Some(item.id);
+                                            }
+                                            ui.colored_label(ui.visuals().error_fg_color, message);
+                                        }
+                                        _ => {
+                                            ui.spinner();
+                                        }
+                                    }
+                                }
                             });
                         });
                     }
                 }
             });
 
-        // if no_update_item && self.update_item_id != INVALID_ITEM_ID {
-        //
-        // }
-    }
-
-    fn render_item_update(&self, ui: &mut Ui, id: u32, app: &mut TemplateApp) -> u32 {
-        let mut need_request = false;
-        if self.update_item_id == INVALID_ITEM_ID {
-            if ui.button("update").clicked() {
-                need_request = true;
-            }
-        } else {
-            if self.update_item_id != id {
-                return self.update_item_id;
-            }
-
-            let value = app.promise_map.get(&self.key_update_item);
-            if value.is_none() {
-                return INVALID_ITEM_ID;
-            }
-            let promise = value.unwrap();
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(resource) => match &resource.response_data {
-                        ResponseType::GeneralResponse(_) => {
-                            // self.update_item_id = INVALID_ITEM_ID;
-                        }
-                        ResponseType::Error(err) => {
-                            ui.horizontal(|ui| {
-                                if ui.button("retry").clicked() {
-                                    need_request = true;
-                                }
-                                ui.colored_label(ui.visuals().error_fg_color, err);
-                            });
-                        }
-                        _ => {
-                            ui.horizontal(|ui| {
-                                if ui.button("retry").clicked() {
-                                    need_request = true;
-                                }
-                                ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
-                            });
-                        }
-                    },
-                    Err(error) => {
-                        ui.horizontal(|ui| {
-                            if ui.button("retry").clicked() {
-                                need_request = true;
-                            }
-
-                            ui.colored_label(
-                                ui.visuals().error_fg_color,
-                                if error.is_empty() {
-                                    "Request failed"
-                                } else {
-                                    error
-                                },
-                            );
-                        });
-                    }
-                }
-            } else {
-                ui.spinner();
-            }
+        // 更新操作
+        if let Some(info) = need_update_item_info {
+            self.item_operation_map.insert(
+                self.key_update_item.clone(),
+                (info.id, OperationResult::Wait),
+            );
+            let req = proto::PlayerUpdateReq {
+                id: info.id,
+                username: info.username,
+                password: info.password,
+            };
+            app.http_request(
+                ctx,
+                &self.key_update_item,
+                None,
+                serde_json::to_string(&req).unwrap().into(),
+            )
         }
-        self.update_item_id
+
+        // 删除操作
+        if let Some(info) = need_remove_item_info {
+            self.item_operation_map
+                .insert(self.key_remove_item.clone(), (info, OperationResult::Wait));
+            let req = proto::PlayerRemoveReq { id: info };
+            app.http_request(
+                ctx,
+                &self.key_remove_item,
+                None,
+                serde_json::to_string(&req).unwrap().into(),
+            )
+        }
     }
 }

@@ -65,11 +65,11 @@ impl Default for TemplateApp {
             cur_page_index: 0,
             sub_pages: vec![
                 SubPage {
-                    name: "Player".into(),
+                    name: "👥Player".into(),
                     render: Rc::new(RefCell::new(render::player::Logic::new())),
                 },
                 SubPage {
-                    name: "Channel".into(),
+                    name: "🔀Channel".into(),
                     render: Rc::new(RefCell::new(render::channel::Logic::new())),
                 },
             ],
