@@ -8,7 +8,7 @@ use egui::{Rect, Ui};
 use egui_extras::{Column, TableBuilder};
 use std::collections::HashMap;
 
-static PAGE_SIZE: u32 = 20;
+static PAGE_SIZE: usize = 20;
 static INVALID_ITEM_ID: u32 = u32::MAX;
 
 static GRAY: Color32 = Color32::from_rgba_premultiplied(80, 80, 80, 80);
@@ -32,8 +32,8 @@ pub struct Logic {
 
     item_operation_map: HashMap<String, (u32, OperationResult)>,
 
-    // 是否正在等待玩家列表数据刷新
-    wait_player_list: bool,
+    // 是否正在等待列表数据刷新
+    wait_data_list: bool,
     data: Option<PlayerListResponse>,
 
     show_create_window: bool,
@@ -47,7 +47,7 @@ impl Logic {
             key_remove_item: "remove_player".into(),
             key_add_item: "add_player".into(),
             key_update_item: "update_player".into(),
-            wait_player_list: false,
+            wait_data_list: false,
             data: None,
             item_operation_map: HashMap::new(),
             show_create_window: false,
@@ -62,19 +62,20 @@ impl Logic {
 impl RenderUI for Logic {
     fn render(&mut self, ctx: &egui::Context, app: &mut TemplateApp) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.render_content(ui, ctx, app);
-            if self.busy(app) {
+            let need_update_page = if self.busy(app) {
                 self.render_loading(ui);
-                self.render_create_window(ctx, app, false);
+                self.render_create_window(ctx, app, false)
             } else {
-                self.render_create_window(ctx, app, true);
-            }
+                self.render_create_window(ctx, app, true)
+            };
+
+            self.render_content(ui, ctx, app, need_update_page);
         });
     }
 
     fn reset(&mut self) {
         self.data = None;
-        self.wait_player_list = false;
+        self.wait_data_list = false;
         self.item_operation_map.clear();
         self.show_create_window = false;
         self.create_data = CreateData {
@@ -85,16 +86,22 @@ impl RenderUI for Logic {
 }
 
 impl Logic {
-    fn render_content(&mut self, ui: &mut Ui, ctx: &egui::Context, app: &mut TemplateApp) {
-        let mut need_request = false;
+    fn render_content(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &egui::Context,
+        app: &mut TemplateApp,
+        need_update_page: bool,
+    ) {
+        let mut need_request = need_update_page;
         let mut cur_page_number: usize = 0;
         if let Some(promise) = app.promise_map.get_mut(&self.key_get_list) {
             if let Some(result) = promise.ready_mut() {
                 match result {
                     Ok(ref resource) => match &resource.response_data {
                         ResponseType::PlayerListResponse(ref player_list) => {
-                            if self.wait_player_list {
-                                self.wait_player_list = false;
+                            if self.wait_data_list {
+                                self.wait_data_list = false;
                                 self.data = Some(player_list.clone());
                             }
                         }
@@ -145,8 +152,8 @@ impl Logic {
                     page_count = 1;
                 }
 
-                if cur_page_number > 0 && page_count <= cur_page_number as u32 {
-                    cur_page_number = (page_count - 1) as usize;
+                if cur_page_number > 0 && page_count <= cur_page_number {
+                    cur_page_number = page_count - 1;
                     need_request = true;
                 }
 
@@ -154,7 +161,7 @@ impl Logic {
                 if page_count > 1
                     && egui::ComboBox::from_label("Page")
                         .selected_text(format!("{}", cur_page_number + 1))
-                        .show_index(ui, &mut cur_page_number, page_count as usize, |i| {
+                        .show_index(ui, &mut cur_page_number, page_count, |i| {
                             format!("{}", i + 1)
                         })
                         .changed()
@@ -176,7 +183,7 @@ impl Logic {
         // 请求列表数据
         if need_request {
             let req = proto::PlayerListRequest {
-                page_number: cur_page_number as u32,
+                page_number: cur_page_number,
                 page_size: PAGE_SIZE,
             };
             app.http_request(
@@ -185,7 +192,7 @@ impl Logic {
                 None,
                 serde_json::to_string(&req).unwrap().into(),
             );
-            self.wait_player_list = true;
+            self.wait_data_list = true;
         }
     }
 
@@ -386,7 +393,12 @@ impl Logic {
         }
     }
 
-    fn render_create_window(&mut self, ctx: &egui::Context, app: &mut TemplateApp, enabled: bool) {
+    fn render_create_window(
+        &mut self,
+        ctx: &egui::Context,
+        app: &mut TemplateApp,
+        enabled: bool,
+    ) -> bool {
         let mut request_finish = false;
         egui::Window::new("New Player")
             .vscroll(true)
@@ -460,7 +472,14 @@ impl Logic {
             self.show_create_window = false;
             self.create_data.username.clear();
             self.create_data.password.clear();
+            if let Some(data) = &mut self.data {
+                data.total_count = data.total_count + 1;
+                if data.players.len() < PAGE_SIZE {
+                    return true;
+                }
+            }
         }
+        false
     }
 
     fn busy(&mut self, app: &mut TemplateApp) -> bool {

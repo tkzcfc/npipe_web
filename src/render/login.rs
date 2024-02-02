@@ -4,7 +4,6 @@ use crate::render::RenderUI;
 use crate::resource::ResponseType;
 use crate::TemplateApp;
 use egui::{Align2, Ui};
-use log::Log;
 use regex::Regex;
 
 pub struct Logic {
