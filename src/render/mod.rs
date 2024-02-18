@@ -1,10 +1,10 @@
 use crate::TemplateApp;
 use egui::Ui;
 
-pub mod channel;
 pub mod login;
 mod password;
 pub mod player;
+pub mod tunnel;
 
 pub trait RenderUI {
     fn render(&mut self, ctx: &egui::Context, app: &mut TemplateApp);

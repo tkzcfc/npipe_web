@@ -103,12 +103,19 @@ impl Logic {
                             if self.wait_data_list {
                                 self.wait_data_list = false;
                                 self.data = Some(player_list.clone());
+                                self.item_operation_map.clear();
                             }
                         }
                         ResponseType::Error(err) => {
+                            if ui.button("retry").clicked() {
+                                need_request = true;
+                            }
                             ui.colored_label(ui.visuals().error_fg_color, err);
                         }
                         _ => {
+                            if ui.button("retry").clicked() {
+                                need_request = true;
+                            }
                             ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
                         }
                     },

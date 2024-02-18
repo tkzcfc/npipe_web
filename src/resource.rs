@@ -4,7 +4,7 @@ pub enum ResponseType {
     Error(String),
     GeneralResponse(proto::GeneralResponse),
     PlayerListResponse(proto::PlayerListResponse),
-    ChannelListResponse(proto::ChannelListResponse),
+    TunnelListResponse(proto::TunnelListResponse),
 }
 
 pub struct Resource {
@@ -30,9 +30,9 @@ impl Resource {
                         }
                     }
                 }
-                "channel_list" => {
-                    match serde_json::from_slice::<proto::ChannelListResponse>(&response.bytes) {
-                        Ok(data) => ResponseType::ChannelListResponse(data),
+                "tunnel_list" => {
+                    match serde_json::from_slice::<proto::TunnelListResponse>(&response.bytes) {
+                        Ok(data) => ResponseType::TunnelListResponse(data),
                         Err(err) => {
                             ResponseType::Error(format!("json decode: {}", err.to_string()))
                         }

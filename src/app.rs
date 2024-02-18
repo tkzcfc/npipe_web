@@ -70,8 +70,8 @@ impl Default for TemplateApp {
                     render: Rc::new(RefCell::new(render::player::Logic::new())),
                 },
                 SubPage {
-                    name: "🔀Channel".into(),
-                    render: Rc::new(RefCell::new(render::channel::Logic::new())),
+                    name: "🔀tunnel".into(),
+                    render: Rc::new(RefCell::new(render::tunnel::Logic::new())),
                 },
             ],
         }
@@ -204,8 +204,7 @@ impl TemplateApp {
                             break;
                         }
                     }
-                }
-                else {
+                } else {
                     if key == "logout" {
                         info!("logout code: 0");
                         self.logout();

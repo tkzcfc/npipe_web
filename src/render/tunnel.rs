@@ -1,4 +1,4 @@
-use crate::proto::ChannelListResponse;
+use crate::proto::TunnelListResponse;
 use crate::render::{render_number_u32, RenderUI};
 use crate::resource::ResponseType;
 use crate::{proto, TemplateApp};
@@ -37,7 +37,7 @@ pub struct Logic {
 
     // 是否正在等待列表数据刷新
     wait_data_list: bool,
-    data: Option<ChannelListResponse>,
+    data: Option<TunnelListResponse>,
 
     show_create_window: bool,
     create_data: CreateData,
@@ -46,10 +46,10 @@ pub struct Logic {
 impl Logic {
     pub fn new() -> Self {
         Self {
-            key_get_list: "channel_list".into(),
-            key_remove_item: "remove_channel".into(),
-            key_add_item: "add_channel".into(),
-            key_update_item: "update_channel".into(),
+            key_get_list: "tunnel_list".into(),
+            key_remove_item: "remove_tunnel".into(),
+            key_add_item: "add_tunnel".into(),
+            key_update_item: "update_tunnel".into(),
             wait_data_list: false,
             data: None,
             item_operation_map: HashMap::new(),
@@ -108,16 +108,23 @@ impl Logic {
             if let Some(result) = promise.ready_mut() {
                 match result {
                     Ok(ref resource) => match &resource.response_data {
-                        ResponseType::ChannelListResponse(ref channel_list) => {
+                        ResponseType::TunnelListResponse(ref tunnel_list) => {
                             if self.wait_data_list {
                                 self.wait_data_list = false;
-                                self.data = Some(channel_list.clone());
+                                self.data = Some(tunnel_list.clone());
+                                self.item_operation_map.clear();
                             }
                         }
                         ResponseType::Error(err) => {
+                            if ui.button("retry").clicked() {
+                                need_request = true;
+                            }
                             ui.colored_label(ui.visuals().error_fg_color, err);
                         }
                         _ => {
+                            if ui.button("retry").clicked() {
+                                need_request = true;
+                            }
                             ui.colored_label(ui.visuals().error_fg_color, "Unknown error");
                         }
                     },
@@ -142,7 +149,7 @@ impl Logic {
         }
 
         // 玩家列表渲染
-        if let Some(ref mut channel_list) = self.data {
+        if let Some(ref mut tunnel_list) = self.data {
             ui.horizontal(|ui| {
                 // 刷新按钮
                 if ui.button("🔃").clicked() {
@@ -150,11 +157,11 @@ impl Logic {
                 }
 
                 // 计算页数
-                cur_page_number = channel_list.cur_page_number as usize;
-                let mut page_count = if channel_list.total_count % PAGE_SIZE == 0 {
-                    channel_list.total_count / PAGE_SIZE
+                cur_page_number = tunnel_list.cur_page_number as usize;
+                let mut page_count = if tunnel_list.total_count % PAGE_SIZE == 0 {
+                    tunnel_list.total_count / PAGE_SIZE
                 } else {
-                    channel_list.total_count / PAGE_SIZE + 1
+                    tunnel_list.total_count / PAGE_SIZE + 1
                 };
 
                 if page_count <= 0 {
@@ -180,10 +187,10 @@ impl Logic {
             });
 
             ui.horizontal(|ui| {
-                if ui.button("new channel").clicked() {
+                if ui.button("new tunnel").clicked() {
                     self.show_create_window = true;
                 }
-                ui.label(format!("total : {}", channel_list.total_count));
+                ui.label(format!("total : {}", tunnel_list.total_count));
             });
 
             self.render_table(ui, ctx, app);
@@ -191,7 +198,7 @@ impl Logic {
 
         // 请求列表数据
         if need_request {
-            let req = proto::ChannelListRequest {
+            let req = proto::TunnelListRequest {
                 page_number: cur_page_number,
                 page_size: PAGE_SIZE,
             };
@@ -278,7 +285,7 @@ impl Logic {
             })
             .body(|mut body| {
                 if let Some(ref mut item_list) = self.data {
-                    for (index, item) in item_list.channels.iter_mut().enumerate() {
+                    for (index, item) in item_list.tunnels.iter_mut().enumerate() {
                         body.row(20.0, |mut row| {
                             row.col(|ui| {
                                 ui.label(format!("{}", index + 1));
@@ -385,7 +392,7 @@ impl Logic {
                 self.key_update_item.clone(),
                 (info.id, OperationResult::Wait),
             );
-            let req = proto::ChannelUpdateReq {
+            let req = proto::TunnelUpdateReq {
                 id: info.id,
                 source: info.source,
                 endpoint: info.endpoint,
@@ -406,7 +413,7 @@ impl Logic {
         if let Some(info) = need_remove_item_info {
             self.item_operation_map
                 .insert(self.key_remove_item.clone(), (info, OperationResult::Wait));
-            let req = proto::ChannelRemoveReq { id: info };
+            let req = proto::TunnelRemoveReq { id: info };
             app.http_request(
                 ctx,
                 &self.key_remove_item,
@@ -423,7 +430,7 @@ impl Logic {
         enabled: bool,
     ) -> bool {
         let mut request_finish = false;
-        egui::Window::new("New Channel")
+        egui::Window::new("New Tunnel")
             .vscroll(true)
             .hscroll(true)
             .resizable(true)
@@ -455,7 +462,7 @@ impl Logic {
                 ui.separator();
                 ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                     if ui.button("   ok   ").clicked() && app.can_request(&self.key_add_item) {
-                        let req = proto::ChannelAddReq {
+                        let req = proto::TunnelAddReq {
                             source: self.create_data.source.clone(),
                             endpoint: self.create_data.endpoint.clone(),
                             enabled: 1,
@@ -511,7 +518,7 @@ impl Logic {
             self.show_create_window = false;
             if let Some(data) = &mut self.data {
                 data.total_count = data.total_count + 1;
-                if data.channels.len() < PAGE_SIZE {
+                if data.tunnels.len() < PAGE_SIZE {
                     return true;
                 }
             }
@@ -563,7 +570,7 @@ impl Logic {
 
         if let Some(removed_id) = removed_id {
             if let Some(data) = &mut self.data {
-                data.channels.retain(|x| x.id != removed_id);
+                data.tunnels.retain(|x| x.id != removed_id);
                 data.total_count -= 1;
             }
         }
