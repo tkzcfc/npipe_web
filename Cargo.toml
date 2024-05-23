@@ -39,7 +39,12 @@ url = { version = "2.5" }
 
 
 [profile.release]
-opt-level = 2 # fast and small wasm
+# 2 fast and small wasm
+# z small
+opt-level = "z"
+strip = true
+codegen-units = 1
+
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
