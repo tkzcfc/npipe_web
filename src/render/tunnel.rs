@@ -4,9 +4,10 @@ use crate::resource::ResponseType;
 use crate::{proto, TemplateApp};
 use eframe::emath::vec2;
 use eframe::epaint::Color32;
-use egui::{Rect, Ui};
+use egui::{ComboBox, Rect, Ui};
 use egui_extras::{Column, TableBuilder};
 use std::collections::HashMap;
+use std::string::String;
 
 static PAGE_SIZE: usize = 20;
 static INVALID_ITEM_ID: u32 = u32::MAX;
@@ -25,7 +26,12 @@ struct CreateData {
     sender: u32,
     receiver: u32,
     description: String,
+    tunnel_type: u32,
+    password: String,
+    username: String,
 }
+
+const TUNNEL_TYPE_OPTION: [&str; 4] = ["TCP", "UDP", "SOCKS5", "UNKNOWN"];
 
 pub struct Logic {
     key_get_list: String,
@@ -60,6 +66,9 @@ impl Logic {
                 sender: 0,
                 receiver: 0,
                 description: "".to_string(),
+                tunnel_type: 0,
+                password: "".to_string(),
+                username: "".to_string(),
             },
         }
     }
@@ -90,6 +99,9 @@ impl RenderUI for Logic {
             sender: 0,
             receiver: 0,
             description: "".to_string(),
+            tunnel_type: 0,
+            password: "".to_string(),
+            username: "".to_string(),
         };
     }
 }
@@ -175,7 +187,7 @@ impl Logic {
 
                 // 页数选择
                 if page_count > 1
-                    && egui::ComboBox::from_label("Page")
+                    && ComboBox::from_label("Page")
                         .selected_text(format!("{}", cur_page_number + 1))
                         .show_index(ui, &mut cur_page_number, page_count, |i| {
                             format!("{}", i + 1)
@@ -249,6 +261,9 @@ impl Logic {
             .column(Column::auto())
             .column(Column::auto())
             .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto())
             .min_scrolled_height(0.0);
         table
             .header(20.0, |mut header| {
@@ -275,6 +290,15 @@ impl Logic {
                 });
                 header.col(|ui| {
                     ui.strong("description");
+                });
+                header.col(|ui| {
+                    ui.strong("tunnel_type");
+                });
+                header.col(|ui| {
+                    ui.strong("password");
+                });
+                header.col(|ui| {
+                    ui.strong("username");
                 });
                 header.col(|ui| {
                     ui.strong("update");
@@ -310,6 +334,39 @@ impl Logic {
                             });
                             row.col(|ui| {
                                 ui.text_edit_singleline(&mut item.description);
+                            });
+                            row.col(|ui| {
+                                let mut cur_index = item.tunnel_type as usize;
+                                if cur_index + 1 >= TUNNEL_TYPE_OPTION.len() {
+                                    cur_index = TUNNEL_TYPE_OPTION.len() - 1;
+                                }
+
+                                if ComboBox::from_label("Type")
+                                    .selected_text(TUNNEL_TYPE_OPTION[cur_index])
+                                    .show_index(
+                                        ui,
+                                        &mut cur_index,
+                                        TUNNEL_TYPE_OPTION.len() - 1,
+                                        |i| TUNNEL_TYPE_OPTION[i],
+                                    )
+                                    .changed()
+                                {
+                                    item.tunnel_type = cur_index as u32;
+                                }
+                            });
+                            row.col(|ui| {
+                                if tunnel_has_password(item.tunnel_type) {
+                                    ui.text_edit_singleline(&mut item.password);
+                                } else {
+                                    ui.label(&item.password);
+                                }
+                            });
+                            row.col(|ui| {
+                                if tunnel_has_user_name(item.tunnel_type) {
+                                    ui.text_edit_singleline(&mut item.username);
+                                } else {
+                                    ui.label(&item.username);
+                                }
                             });
                             row.col(|ui| {
                                 if update_item_operation.is_none() {
@@ -400,6 +457,9 @@ impl Logic {
                 sender: info.sender,
                 receiver: info.receiver,
                 description: info.description,
+                tunnel_type: info.tunnel_type,
+                password: info.password,
+                username: info.username,
             };
             app.http_request(
                 ctx,
@@ -459,6 +519,36 @@ impl Logic {
                     ui.label("description:");
                     ui.text_edit_singleline(&mut self.create_data.description);
                 });
+                ui.horizontal(|ui| {
+                    ui.label("type:");
+                    let mut cur_index = self.create_data.tunnel_type as usize;
+                    if cur_index + 1 >= TUNNEL_TYPE_OPTION.len() {
+                        cur_index = TUNNEL_TYPE_OPTION.len() - 1;
+                    }
+
+                    if ComboBox::from_label("")
+                        .selected_text(TUNNEL_TYPE_OPTION[cur_index])
+                        .show_index(ui, &mut cur_index, TUNNEL_TYPE_OPTION.len() - 1, |i| {
+                            TUNNEL_TYPE_OPTION[i]
+                        })
+                        .changed()
+                    {
+                        self.create_data.tunnel_type = cur_index as u32;
+                    }
+                });
+
+                if tunnel_has_user_name(self.create_data.tunnel_type) {
+                    ui.horizontal(|ui| {
+                        ui.label("username:");
+                        ui.text_edit_singleline(&mut self.create_data.username);
+                    });
+                }
+                if tunnel_has_password(self.create_data.tunnel_type) {
+                    ui.horizontal(|ui| {
+                        ui.label("password:");
+                        ui.text_edit_singleline(&mut self.create_data.password);
+                    });
+                }
                 ui.separator();
                 ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                     if ui.button("   ok   ").clicked() && app.can_request(&self.key_add_item) {
@@ -469,6 +559,9 @@ impl Logic {
                             sender: self.create_data.sender,
                             receiver: self.create_data.receiver,
                             description: self.create_data.description.clone(),
+                            tunnel_type: self.create_data.tunnel_type,
+                            password: self.create_data.password.clone(),
+                            username: self.create_data.username.clone(),
                         };
                         app.http_request(
                             ctx,
@@ -577,4 +670,12 @@ impl Logic {
 
         !app.can_request(&self.key_get_list) || !app.can_request(&self.key_add_item)
     }
+}
+
+fn tunnel_has_user_name(tunnel_type: u32) -> bool {
+    tunnel_type == 2
+}
+
+fn tunnel_has_password(tunnel_type: u32) -> bool {
+    tunnel_type == 2
 }
