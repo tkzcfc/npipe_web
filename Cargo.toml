@@ -38,12 +38,15 @@ web-sys = { version = "0.3", features = ["Window", "Location"] }
 url = { version = "2.5" }
 
 
+# https://www.aloxaf.com/2018/09/reduce_rust_size/
 [profile.release]
-# 2 fast and small wasm
-# z small
-opt-level = "z"
-strip = true
+debug = false # 去除调试信息
+panic = "abort"
+lto = true
 codegen-units = 1
+strip = true        # Strip symbols from binary*
+opt-level = "z"  # 最小化二进制文件大小
+
 
 
 # Optimize all dependencies even in debug builds:
