@@ -29,9 +29,31 @@ struct CreateData {
     tunnel_type: u32,
     password: String,
     username: String,
+    is_compressed: bool,
+    encryption_method: String,
+    custom_mapping: HashMap<String, String>,
+}
+
+impl Default for CreateData {
+    fn default() -> Self {
+        Self {
+            source: "".to_string(),
+            endpoint: "".to_string(),
+            sender: 0,
+            receiver: 0,
+            description: "".to_string(),
+            tunnel_type: 0,
+            password: "".to_string(),
+            username: "".to_string(),
+            is_compressed: false,
+            encryption_method: "".to_string(),
+            custom_mapping: HashMap::new(),
+        }
+    }
 }
 
 const TUNNEL_TYPE_OPTION: [&str; 4] = ["TCP", "UDP", "SOCKS5", "UNKNOWN"];
+const TUNNEL_ENCRYPTION_METHOD: [&str; 2] = ["None", "XSalsa20Poly1305"];
 
 pub struct Logic {
     key_get_list: String,
@@ -60,16 +82,7 @@ impl Logic {
             data: None,
             item_operation_map: HashMap::new(),
             show_create_window: false,
-            create_data: CreateData {
-                source: "".to_string(),
-                endpoint: "".to_string(),
-                sender: 0,
-                receiver: 0,
-                description: "".to_string(),
-                tunnel_type: 0,
-                password: "".to_string(),
-                username: "".to_string(),
-            },
+            create_data: CreateData::default(),
         }
     }
 }
@@ -93,16 +106,7 @@ impl RenderUI for Logic {
         self.wait_data_list = false;
         self.item_operation_map.clear();
         self.show_create_window = false;
-        self.create_data = CreateData {
-            source: "".to_string(),
-            endpoint: "".to_string(),
-            sender: 0,
-            receiver: 0,
-            description: "".to_string(),
-            tunnel_type: 0,
-            password: "".to_string(),
-            username: "".to_string(),
-        };
+        self.create_data = CreateData::default();
     }
 }
 
@@ -264,6 +268,9 @@ impl Logic {
             .column(Column::auto())
             .column(Column::auto())
             .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto())
             .min_scrolled_height(0.0);
         table
             .header(20.0, |mut header| {
@@ -274,7 +281,7 @@ impl Logic {
                     ui.strong("id");
                 });
                 header.col(|ui| {
-                    ui.strong("source");
+                    ui.strong("source(listen)");
                 });
                 header.col(|ui| {
                     ui.strong("endpoint");
@@ -283,10 +290,13 @@ impl Logic {
                     ui.strong("enabled");
                 });
                 header.col(|ui| {
-                    ui.strong("sender");
+                    ui.strong("compressed");
                 });
                 header.col(|ui| {
-                    ui.strong("receiver");
+                    ui.strong("sender(client)");
+                });
+                header.col(|ui| {
+                    ui.strong("receiver(server)");
                 });
                 header.col(|ui| {
                     ui.strong("description");
@@ -299,6 +309,12 @@ impl Logic {
                 });
                 header.col(|ui| {
                     ui.strong("username");
+                });
+                header.col(|ui| {
+                    ui.strong("encryption_method");
+                });
+                header.col(|ui| {
+                    ui.strong("custom_mapping");
                 });
                 header.col(|ui| {
                     ui.strong("update");
@@ -325,6 +341,9 @@ impl Logic {
                             });
                             row.col(|ui| {
                                 ui.checkbox(&mut item.enabled, "enabled");
+                            });
+                            row.col(|ui| {
+                                ui.checkbox(&mut item.is_compressed, "compressed");
                             });
                             row.col(|ui| {
                                 render_number_u32(ui, &mut item.sender);
@@ -367,6 +386,30 @@ impl Logic {
                                 } else {
                                     ui.label(&item.username);
                                 }
+                            });
+                            row.col(|ui| {
+                                let mut index: usize = if let Some(i) = TUNNEL_ENCRYPTION_METHOD
+                                    .iter()
+                                    .position(|x| x == &item.encryption_method)
+                                {
+                                    i
+                                } else {
+                                    0
+                                };
+
+                                if ComboBox::from_label("Type")
+                                    .selected_text(TUNNEL_ENCRYPTION_METHOD[index])
+                                    .show_index(ui, &mut index, TUNNEL_ENCRYPTION_METHOD.len(), |i| {
+                                        TUNNEL_ENCRYPTION_METHOD[i]
+                                    })
+                                    .changed()
+                                {
+                                    item.encryption_method =
+                                        TUNNEL_ENCRYPTION_METHOD[index].to_owned();
+                                }
+                            });
+                            row.col(|ui| {
+                                ui.label("not support");
                             });
                             row.col(|ui| {
                                 if update_item_operation.is_none() {
@@ -460,6 +503,9 @@ impl Logic {
                 tunnel_type: info.tunnel_type,
                 password: info.password,
                 username: info.username,
+                is_compressed: info.is_compressed as u8,
+                encryption_method: info.encryption_method,
+                custom_mapping: info.custom_mapping,
             };
             app.http_request(
                 ctx,
@@ -499,7 +545,7 @@ impl Logic {
             .enabled(enabled)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("source     :");
+                    ui.label("source(listen)     :");
                     ui.text_edit_singleline(&mut self.create_data.source);
                 });
 
@@ -508,16 +554,41 @@ impl Logic {
                     ui.text_edit_singleline(&mut self.create_data.endpoint);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("sender     :");
+                    ui.label("sender(client)     :");
                     render_number_u32(ui, &mut self.create_data.sender);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("receiver   :");
+                    ui.label("receiver(server)   :");
                     render_number_u32(ui, &mut self.create_data.receiver);
                 });
                 ui.horizontal(|ui| {
                     ui.label("description:");
                     ui.text_edit_singleline(&mut self.create_data.description);
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.create_data.is_compressed, "compressed");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("encryption_method:");
+                    let mut index: usize = if let Some(i) = TUNNEL_ENCRYPTION_METHOD
+                        .iter()
+                        .position(|x| x == &self.create_data.encryption_method)
+                    {
+                        i
+                    } else {
+                        0
+                    };
+
+                    if ComboBox::from_label("Type")
+                        .selected_text(TUNNEL_ENCRYPTION_METHOD[index])
+                        .show_index(ui, &mut index, TUNNEL_ENCRYPTION_METHOD.len(), |i| {
+                            TUNNEL_ENCRYPTION_METHOD[i]
+                        })
+                        .changed()
+                    {
+                        self.create_data.encryption_method =
+                            TUNNEL_ENCRYPTION_METHOD[index].to_owned();
+                    }
                 });
                 ui.horizontal(|ui| {
                     ui.label("type:");
@@ -562,6 +633,9 @@ impl Logic {
                             tunnel_type: self.create_data.tunnel_type,
                             password: self.create_data.password.clone(),
                             username: self.create_data.username.clone(),
+                            is_compressed: self.create_data.is_compressed as u8,
+                            encryption_method: self.create_data.encryption_method.clone(),
+                            custom_mapping: self.create_data.custom_mapping.clone(),
                         };
                         app.http_request(
                             ctx,
