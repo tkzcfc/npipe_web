@@ -53,7 +53,7 @@ impl Default for CreateData {
 }
 
 const TUNNEL_TYPE_OPTION: [&str; 4] = ["TCP", "UDP", "SOCKS5", "UNKNOWN"];
-const TUNNEL_ENCRYPTION_METHOD: [&str; 2] = ["None", "XSalsa20Poly1305"];
+const TUNNEL_ENCRYPTION_METHOD: [&str; 3] = ["None", "Aes128", "Xor"];
 
 pub struct Logic {
     key_get_list: String,
